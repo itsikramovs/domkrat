@@ -25,6 +25,50 @@ interface VinSearchResponse extends Paginated<Product> {
   };
 }
 
+interface MeiliHit {
+  id: string;
+  sku: string;
+  slug: string;
+  nameRu: string;
+  nameUz: string;
+  oemNumber: string | null;
+  brand: string | null;
+  category: string | null;
+  categorySlug: string;
+  price: number;
+  rating: number;
+  reviewsCount: number;
+  isFeatured: boolean;
+  isOnSale: boolean;
+  imageUrl: string | null;
+}
+
+function hitToProduct(h: MeiliHit): Product {
+  return {
+    id: h.id,
+    merchantId: '',
+    categoryId: '',
+    brandId: null,
+    sku: h.sku,
+    slug: h.slug,
+    name: { ru: h.nameRu, uz: h.nameUz },
+    oemNumber: h.oemNumber,
+    price: String(h.price),
+    compareAtPrice: null,
+    vatRate: '12',
+    rating: String(h.rating),
+    reviewsCount: h.reviewsCount,
+    isFeatured: h.isFeatured,
+    isOnSale: h.isOnSale,
+    isNew: false,
+    status: 'ACTIVE',
+    images: h.imageUrl ? [{ url: h.imageUrl, thumbnailUrl: null }] : [],
+    brand: h.brand ? { id: '', name: h.brand, slug: '', logoUrl: null } : null,
+    category: { id: '', slug: h.categorySlug, name: { ru: h.category ?? '', uz: '' } },
+    merchant: { id: '', brandName: '', slug: '' },
+  };
+}
+
 interface PageProps {
   searchParams: {
     q?: string;
@@ -55,16 +99,27 @@ export default async function SearchPage({ searchParams }: PageProps) {
       vehicle = res.vehicle;
     }
     title = `Поиск по VIN: ${searchParams.vin}`;
+  } else if (searchParams.q) {
+    // Full-text через Meilisearch
+    const res = await api<{ hits: MeiliHit[]; estimatedTotalHits: number }>(
+      `/search/q?q=${encodeURIComponent(searchParams.q)}&limit=48`,
+    ).catch(() => null);
+    if (res) {
+      const items = res.hits.map(hitToProduct);
+      products = {
+        data: items,
+        meta: { page: 1, perPage: items.length, total: res.estimatedTotalHits, totalPages: 1 },
+      };
+    }
+    title = `Поиск: «${searchParams.q}»`;
   } else {
     const qs = new URLSearchParams({ page, perPage: '24', sort: 'popular' });
-    if (searchParams.q) qs.set('search', searchParams.q);
     if (searchParams.makeId) qs.set('carMakeId', searchParams.makeId);
     if (searchParams.modelId) qs.set('carModelId', searchParams.modelId);
     if (searchParams.modificationId) qs.set('carModificationId', searchParams.modificationId);
     products = await api<Paginated<Product>>(`/products?${qs.toString()}`).catch(() => null);
 
-    if (searchParams.q) title = `Поиск: «${searchParams.q}»`;
-    else if (searchParams.makeName) title = `Запчасти для ${searchParams.makeName}`;
+    if (searchParams.makeName) title = `Запчасти для ${searchParams.makeName}`;
   }
 
   const items = products?.data ?? [];

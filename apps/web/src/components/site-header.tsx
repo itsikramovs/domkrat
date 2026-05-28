@@ -1,14 +1,14 @@
 'use client';
 
-import { Camera, Heart, LogOut, Mic, Search, ShoppingCart, User } from 'lucide-react';
+import { Heart, LogOut, ShoppingCart, User } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { SearchAutocomplete } from '@/components/search-autocomplete';
 import { useCart } from '@/lib/api/cart';
 import { useAuthStore } from '@/lib/auth-store';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 
 export function SiteHeader() {
   const router = useRouter();
@@ -22,8 +22,7 @@ export function SiteHeader() {
 
   const itemsCount = cart.data?.itemsCount ?? 0;
 
-  const onSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitSearch = () => {
     const q = search.trim();
     if (q) router.push(`/search?q=${encodeURIComponent(q)}`);
   };
@@ -37,17 +36,16 @@ export function SiteHeader() {
           <span className="text-lg font-bold">Домкрат</span>
         </Link>
 
-        <form onSubmit={onSearchSubmit} className="flex flex-1 justify-center">
-          <div className="relative w-full max-w-2xl">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+        <div className="flex flex-1 justify-center">
+          <div className="w-full max-w-2xl">
+            <SearchAutocomplete
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Искать запчасти, бренды, артикулы…"
-              className="h-11 pl-9 pr-3"
+              onChange={setSearch}
+              onSubmit={submitSearch}
+              position="desktop"
             />
           </div>
-        </form>
+        </div>
 
         <nav className="ml-auto flex items-center gap-1">
           <Button asChild variant="ghost" size="sm" className="relative">
@@ -93,38 +91,18 @@ export function SiteHeader() {
       {/* Mobile sticky search */}
       <div className="md:hidden">
         <div className="flex items-center gap-2 px-4 py-3">
-          <form onSubmit={onSearchSubmit} className="flex-1">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Искать запчасти, бренды, артикулы…"
-                className="h-11 rounded-full bg-secondary border-transparent pl-9 pr-20 text-sm"
-                aria-label="Поиск"
-              />
-              <div className="absolute right-2 top-1/2 flex -translate-y-1/2 gap-1">
-                <button
-                  type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-                  aria-label="Голосовой поиск"
-                >
-                  <Mic className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
-                  aria-label="Поиск камерой"
-                >
-                  <Camera className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </form>
+          <div className="flex-1">
+            <SearchAutocomplete
+              value={search}
+              onChange={setSearch}
+              onSubmit={submitSearch}
+              position="mobile"
+            />
+          </div>
           <Link
             href="/account/favorites"
             aria-label="Избранное"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground"
           >
             <Heart className="h-5 w-5" />
           </Link>

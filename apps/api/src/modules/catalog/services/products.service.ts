@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
@@ -25,7 +26,19 @@ const PRODUCT_INCLUDE = {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
+
+  /** Уведомить поисковый индекс об изменении товара */
+  private emitIndexed(productId: string): void {
+    this.events.emit('product.indexed', productId);
+  }
+
+  private emitRemoved(productId: string): void {
+    this.events.emit('product.removed', productId);
+  }
 
   // -------------------------------------------------------------------------
   // PUBLIC
@@ -195,7 +208,7 @@ export class ProductsService {
     const slug = dto.slug ?? this.toSlug(dto.name.ru) + '-' + dto.sku.toLowerCase().slice(0, 8);
 
     try {
-      return await this.prisma.product.create({
+      const created = await this.prisma.product.create({
         data: {
           merchantId,
           categoryId: dto.categoryId,
@@ -217,6 +230,8 @@ export class ProductsService {
         },
         include: PRODUCT_INCLUDE,
       });
+      this.emitIndexed(created.id);
+      return created;
     } catch (error) {
       this.handleUniqueErr(error);
     }
@@ -247,11 +262,13 @@ export class ProductsService {
       data.brand = dto.brandId ? { connect: { id: dto.brandId } } : { disconnect: true };
 
     try {
-      return await this.prisma.product.update({
+      const updated = await this.prisma.product.update({
         where: { id },
         data,
         include: PRODUCT_INCLUDE,
       });
+      this.emitIndexed(updated.id);
+      return updated;
     } catch (error) {
       this.handleUniqueErr(error);
     }
@@ -267,10 +284,13 @@ export class ProductsService {
     if (!allowed.includes(dto.status)) {
       throw new BadRequestException('Merchant can set only ACTIVE, INACTIVE or DRAFT');
     }
-    return this.prisma.product.update({
+    const updated = await this.prisma.product.update({
       where: { id },
       data: { status: dto.status, publishedAt: dto.status === ProductStatus.ACTIVE ? new Date() : undefined },
     });
+    if (dto.status === ProductStatus.ACTIVE) this.emitIndexed(id);
+    else this.emitRemoved(id);
+    return updated;
   }
 
   async remove(merchantId: string, id: string): Promise<void> {
@@ -279,6 +299,7 @@ export class ProductsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+    this.emitRemoved(id);
   }
 
   // ----- Compatibility -----
@@ -326,13 +347,16 @@ export class ProductsService {
   async moderate(id: string, dto: ModerateProductDto) {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) throw new NotFoundException('Product not found');
-    return this.prisma.product.update({
+    const updated = await this.prisma.product.update({
       where: { id },
       data: {
         status: dto.status,
         publishedAt: dto.status === ProductStatus.ACTIVE ? new Date() : product.publishedAt,
       },
     });
+    if (dto.status === ProductStatus.ACTIVE) this.emitIndexed(id);
+    else this.emitRemoved(id);
+    return updated;
   }
 
   // -------------------------------------------------------------------------

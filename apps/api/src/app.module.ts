@@ -18,6 +18,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OrdersModule } from './modules/orders/orders.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SearchModule } from './modules/search/search.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -48,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
     CatalogModule,
     BannersModule,
     CarsModule,
+    SearchModule,
     CartModule,
     UploadsModule,
     OrdersModule,
