@@ -3,7 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { HealthModule } from './modules/health/health.module';
       },
     }),
     PrismaModule,
+    NotificationsModule,
+    AuthModule,
     HealthModule,
   ],
 })
