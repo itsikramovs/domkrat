@@ -65,4 +65,13 @@ export class OrdersController {
   cancel(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.orders.cancel(user.id, id);
   }
+
+  @Post(':id/confirm-receipt')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Подтвердить получение (SHIPPED → COMPLETED) — кредит мерчантам',
+  })
+  confirmReceipt(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.orders.confirmReceipt(user.id, id);
+  }
 }

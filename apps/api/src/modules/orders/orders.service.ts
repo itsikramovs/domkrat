@@ -402,6 +402,98 @@ export class OrdersService {
   }
 
   // -------------------------------------------------------------------------
+  /** Customer подтверждает получение: SHIPPED/DELIVERED → COMPLETED + credit мерчантов. */
+  async confirmReceipt(userId: string, orderId: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id: orderId, userId },
+      include: { subOrders: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    const allowed: OrderStatus[] = [OrderStatus.SHIPPED, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED];
+    if (!allowed.includes(order.status)) {
+      throw new ConflictException(`Cannot confirm receipt from ${order.status}`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Кредит pending_balance каждому мерчанту
+      for (const sub of order.subOrders) {
+        const payout = new Decimal(sub.merchantPayout.toString());
+        const commission = new Decimal(sub.commissionAmount.toString());
+
+        const balance = await tx.merchantBalance.upsert({
+          where: { merchantId: sub.merchantId },
+          update: {},
+          create: { merchantId: sub.merchantId },
+        });
+
+        const newPending = new Decimal(balance.pendingBalance.toString()).plus(payout);
+        const newTotalEarned = new Decimal(balance.totalEarned.toString()).plus(payout);
+        const newTotalCommission = new Decimal(balance.totalCommissionPaid.toString()).plus(commission);
+
+        await tx.merchantBalance.update({
+          where: { merchantId: sub.merchantId },
+          data: {
+            pendingBalance: newPending.toString(),
+            totalEarned: newTotalEarned.toString(),
+            totalCommissionPaid: newTotalCommission.toString(),
+          },
+        });
+
+        await tx.financialTransaction.create({
+          data: {
+            merchantId: sub.merchantId,
+            transactionType: 'SALE',
+            direction: 'CREDIT',
+            amount: payout.toString(),
+            balanceAfter: newPending.toString(),
+            referenceType: 'sub_order',
+            referenceId: sub.id,
+            description: `Sale ${sub.subOrderNumber} → pending (7d hold)`,
+          },
+        });
+
+        await tx.financialTransaction.create({
+          data: {
+            merchantId: sub.merchantId,
+            transactionType: 'COMMISSION',
+            direction: 'DEBIT',
+            amount: commission.toString(),
+            balanceAfter: newPending.toString(),
+            referenceType: 'sub_order',
+            referenceId: sub.id,
+            description: `Platform commission for ${sub.subOrderNumber}`,
+          },
+        });
+
+        await tx.orderSubOrder.update({
+          where: { id: sub.id },
+          data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
+        });
+      }
+
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.COMPLETED, completedAt: new Date(), deliveredAt: order.deliveredAt ?? new Date() },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          fromStatus: order.status,
+          toStatus: OrderStatus.COMPLETED,
+          changedById: userId,
+          changedByRole: 'CUSTOMER',
+          reason: 'Customer confirmed receipt — credited merchants (pending, 7d hold)',
+        },
+      });
+
+      this.logger.log(`Order ${order.orderNumber} COMPLETED; credited ${order.subOrders.length} sub-orders to pending balances`);
+      return updated;
+    });
+  }
+
+  // -------------------------------------------------------------------------
   /** Внутренний переход CREATED → PAID после успешного платежа. */
   private async markPaid(orderId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
