@@ -1,0 +1,7 @@
+# Generated
+dist/
+node_modules/
+.env
+
+# Prisma
+prisma/migrations/dev_*/

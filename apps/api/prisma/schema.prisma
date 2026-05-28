@@ -1,0 +1,21 @@
+// Domkrat Prisma schema.
+//
+// Это **минимальный bootstrap-каркас**. Полная схема (~80 моделей из
+// docs/04-DATABASE-SCHEMA.md + part2) создаётся в задаче 1.1 из
+// docs/claude-code/CLAUDE-CODE-PLAN.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model HealthCheck {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("health_checks")
+}

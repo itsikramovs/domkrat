@@ -1,0 +1,90 @@
+# Domkrat dev infrastructure.
+# Пароли — dev-only, см. CLAUDE.md секцию "Пароли dev".
+# Все сервисы слушают 0.0.0.0 (binding по умолчанию у Docker port mapping)
+# — доступны с Windows-машины по http://192.168.1.8:<PORT>.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: domkrat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: domkrat
+      POSTGRES_PASSWORD: domkrat_dev_pass
+      POSTGRES_DB: domkrat_dev
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U domkrat -d domkrat_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: domkrat-redis
+    restart: unless-stopped
+    command: ['redis-server', '--requirepass', 'redis_dev_pass', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'redis_dev_pass', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: domkrat-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: meili_dev_key
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: 'true'
+    ports:
+      - '7700:7700'
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:7700/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: domkrat-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin_dev
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: domkrat-mailhog
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+
+volumes:
+  postgres_data:
+  redis_data:
+  meili_data:
+  minio_data:

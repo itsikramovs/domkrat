@@ -1,0 +1,26 @@
+{
+  "name": "@domkrat/config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "index.js",
+  "files": [
+    "eslint",
+    "prettier",
+    "tsconfig"
+  ],
+  "exports": {
+    "./prettier": "./prettier/index.js",
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/nest": "./eslint/nest.js",
+    "./eslint/next": "./eslint/next.js",
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/nest.json": "./tsconfig/nest.json",
+    "./tsconfig/next.json": "./tsconfig/next.json"
+  },
+  "peerDependencies": {
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  }
+}
