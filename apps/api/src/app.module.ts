@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
@@ -29,6 +31,8 @@ import { UsersModule } from './modules/users/users.module';
     }),
     EventEmitterModule.forRoot({ ignoreErrors: false }),
     ScheduleModule.forRoot(),
+    // Глобальный default — 60 req/min с одного IP. Точечные лимиты на auth — через @Throttle().
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
     LoggerModule.forRoot({
       pinoHttp: {
         transport:
@@ -59,5 +63,6 @@ import { UsersModule } from './modules/users/users.module';
     AdminModule,
     HealthModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Ip, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
@@ -10,12 +11,18 @@ import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 
+// Жёсткие лимиты по IP для критичных auth-операций — защита от брутфорса и massbot-регистраций.
+// Глобальный лимит 60/min остаётся для всего остального.
+const STRICT = { default: { limit: 5, ttl: 60_000 } };
+const MODERATE = { default: { limit: 10, ttl: 60_000 } };
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @Throttle(STRICT)
   @Post('register')
   @ApiOperation({ summary: 'Регистрация по email + паролю' })
   register(@Body() dto: RegisterDto) {
@@ -23,6 +30,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(MODERATE)
   @Post('verify-email')
   @ApiOperation({ summary: 'Подтверждение email кодом → access + refresh' })
   verifyEmail(@Body() dto: VerifyEmailDto, @Ip() ip: string) {
@@ -30,6 +38,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(STRICT)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Вход (email + пароль)' })
@@ -54,6 +63,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(STRICT)
   @Post('password-reset/request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Запрос восстановления пароля (код на email)' })
@@ -62,6 +72,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(STRICT)
   @Post('password-reset/confirm')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Подтверждение нового пароля' })

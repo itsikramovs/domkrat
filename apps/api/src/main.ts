@@ -25,6 +25,27 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter(Boolean);
 
+  // Safety checks для production: ловим опасные дефолты до того, как сервис начнёт обслуживать трафик
+  if (config.get<string>('NODE_ENV') === 'production') {
+    const holdDays = Number(config.get<string>('HOLD_DAYS') ?? 7);
+    if (!Number.isFinite(holdDays) || holdDays < 1) {
+      throw new Error(
+        `HOLD_DAYS must be >= 1 in production (got "${config.get<string>('HOLD_DAYS')}"). ` +
+          'Удержание средств мерчанта на 0 дней означает мгновенную выплату до возможности возврата.',
+      );
+    }
+    const jwtSecret = config.get<string>('JWT_SECRET') ?? '';
+    if (jwtSecret.length < 32 || /change_?me|secret|example|dev/i.test(jwtSecret)) {
+      throw new Error('JWT_SECRET must be a strong random string (>= 32 chars, not a placeholder)');
+    }
+    if (corsOrigins.length === 0) {
+      throw new Error('CORS_ORIGINS must be explicitly set in production (no wildcard)');
+    }
+    if (corsOrigins.some((o) => o.includes('localhost') || o.includes('127.0.0.1') || o.includes('192.168'))) {
+      throw new Error(`CORS_ORIGINS contains a dev host in production: ${corsOrigins.join(', ')}`);
+    }
+  }
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(

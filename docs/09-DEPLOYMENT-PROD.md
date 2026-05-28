@@ -129,9 +129,14 @@ sudo -u domkrat --preserve-env=DATABASE_URL \
   env DATABASE_URL="$(grep ^DATABASE_URL /etc/domkrat/api.env | cut -d= -f2-)" \
   pnpm --filter @domkrat/api prisma migrate deploy
 
-# Seed справочников (категории, бренды, машины, шаблоны уведомлений)
-# В production обычно НЕ запускают полный seed.ts (он создаёт тестовых юзеров).
-# Заведите свой prod-seed: только справочники + super admin.
+# Seed справочников + один super admin (без тестовых юзеров и товаров).
+# Полный seed.ts в production не запускайте — он создаёт демо-аккаунты.
+SUPER_ADMIN_EMAIL=admin@domkrat.uz \
+SUPER_ADMIN_PASSWORD="$(openssl rand -base64 24)" \
+sudo -u domkrat --preserve-env=DATABASE_URL,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD \
+  env DATABASE_URL="$(grep ^DATABASE_URL /etc/domkrat/api.env | cut -d= -f2-)" \
+  pnpm --filter @domkrat/api prod-seed
+# Запишите выведенный SUPER_ADMIN_PASSWORD в надёжное место — он показывается один раз.
 ```
 
 ---

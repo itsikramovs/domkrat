@@ -16,14 +16,16 @@ export function SiteFooter() {
             <li><Link className="text-muted-foreground hover:underline" href="/c/tires-and-wheels">Шины и диски</Link></li>
             <li><Link className="text-muted-foreground hover:underline" href="/c/consumables">Расходники</Link></li>
             <li><Link className="text-muted-foreground hover:underline" href="/c/brake-system">Тормозная система</Link></li>
+            <li><Link className="text-muted-foreground hover:underline" href="/brands">Все бренды</Link></li>
           </ul>
         </div>
         <div>
-          <div className="font-semibold mb-2">Помощь</div>
+          <div className="font-semibold mb-2">Информация</div>
           <ul className="space-y-1">
-            <li><Link className="text-muted-foreground hover:underline" href="/about">О нас</Link></li>
-            <li><Link className="text-muted-foreground hover:underline" href="/delivery">Доставка</Link></li>
-            <li><Link className="text-muted-foreground hover:underline" href="/returns">Возврат</Link></li>
+            <li><Link className="text-muted-foreground hover:underline" href="/terms">Условия использования</Link></li>
+            <li><Link className="text-muted-foreground hover:underline" href="/privacy">Конфиденциальность</Link></li>
+            <li><Link className="text-muted-foreground hover:underline" href="/offer">Публичная оферта</Link></li>
+            <li><Link className="text-muted-foreground hover:underline" href="/returns-policy">Возврат и обмен</Link></li>
           </ul>
         </div>
         <div>
@@ -34,7 +36,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t">
         <div className="container py-4 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Домкрат — MVP. Все права защищены.
+          © {new Date().getFullYear()} Домкрат. Все права защищены.
         </div>
       </div>
     </footer>
