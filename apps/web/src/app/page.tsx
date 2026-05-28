@@ -1,43 +1,95 @@
-type HealthStatus = { ok: boolean; payload?: unknown; error?: string };
+import Link from 'next/link';
 
-async function fetchHealth(): Promise<HealthStatus> {
-  const url = `${process.env.INTERNAL_API_URL ?? 'http://localhost:3001/api/v1'}/health/db`;
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    const payload: unknown = await res.json().catch(() => ({}));
-    return { ok: res.ok, payload };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
-  }
-}
+import { serverApi } from '@/lib/api-client';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { formatPrice, pickLocale } from '@/lib/utils';
+import type { Category, Paginated, Product } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const health = await fetchHealth();
-  return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold mb-2">Domkrat · web</h1>
-      <p className="text-gray-600 mb-6">Customer storefront (port 3000)</p>
+  const api = serverApi();
+  const [categories, products] = await Promise.all([
+    api<Category[]>('/categories').catch(() => []),
+    api<Paginated<Product>>('/products?perPage=8&sort=popular').catch(
+      () => ({ data: [], meta: { page: 1, perPage: 8, total: 0, totalPages: 0 } }),
+    ),
+  ]);
 
-      <section className="border rounded-lg p-4">
-        <h2 className="font-semibold mb-2">API status</h2>
-        <p>
-          <span className="font-mono">/api/v1/health/db</span> →{' '}
-          <span className={health.ok ? 'text-green-600' : 'text-red-600'}>
-            {health.ok ? 'ok' : 'error'}
-          </span>
-        </p>
-        {health.error ? (
-          <pre className="mt-2 text-xs text-red-700 overflow-auto">{health.error}</pre>
-        ) : (
-          <pre className="mt-2 text-xs bg-gray-50 p-2 rounded overflow-auto">
-            {JSON.stringify(health.payload, null, 2)}
-          </pre>
-        )}
+  return (
+    <div className="container py-8 space-y-12">
+      <section className="rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-8 md:p-12">
+        <div className="max-w-2xl space-y-4">
+          <h1 className="text-3xl md:text-5xl font-bold tracking-tight">
+            Автозапчасти для Узбекистана
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Тысячи товаров от проверенных мерчантов. Подбор по марке авто, по VIN или OEM-номеру.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link href="/c/tires-and-wheels">Перейти в каталог</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/search">Поиск по OEM</Link>
+            </Button>
+          </div>
+        </div>
       </section>
 
-      <footer className="mt-8 text-xs text-gray-500">
-        MVP bootstrap · полный каталог появится в Sprint 2+ (см. docs/claude-code/CLAUDE-CODE-PLAN.md)
-      </footer>
-    </main>
+      <section>
+        <div className="mb-6 flex items-end justify-between">
+          <h2 className="text-2xl font-bold">Категории</h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          {categories.slice(0, 10).map((c) => (
+            <Link key={c.id} href={`/c/${c.slug}`}>
+              <Card className="hover:border-primary transition-colors h-full">
+                <CardContent className="p-4 flex flex-col gap-2">
+                  <div className="text-lg">📦</div>
+                  <div className="font-medium text-sm">{pickLocale(c.name)}</div>
+                  {c.children && c.children.length > 0 ? (
+                    <div className="text-xs text-muted-foreground">{c.children.length} подкатегорий</div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-6 flex items-end justify-between">
+          <h2 className="text-2xl font-bold">Популярные товары</h2>
+          <Button asChild variant="link">
+            <Link href="/c/consumables">Все товары →</Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          {products.data.map((p) => (
+            <Link key={p.id} href={`/p/${p.slug}`}>
+              <Card className="h-full hover:border-primary transition-colors">
+                <CardContent className="p-4 flex flex-col gap-2 h-full">
+                  <div className="aspect-square bg-muted rounded-md flex items-center justify-center text-3xl">
+                    🔧
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {p.brand?.name ?? ''} · {p.merchant.brandName}
+                  </div>
+                  <div className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">{pickLocale(p.name)}</div>
+                  <div className="mt-auto text-lg font-bold text-primary">{formatPrice(p.price)}</div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+          {products.data.length === 0 ? (
+            <div className="col-span-full text-center text-muted-foreground py-8">
+              Товары не найдены
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
   );
 }
