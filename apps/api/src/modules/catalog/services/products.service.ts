@@ -47,6 +47,11 @@ export class ProductsService {
     if (query.featured) where.isFeatured = true;
     if (query.onSale) where.isOnSale = true;
     if (query.isNew) where.isNew = true;
+
+    // Фильтр по совместимости: если указана модификация — товар подойдёт когда
+    // ProductCompatibility ссылается на эту модификацию, ИЛИ на её модель, ИЛИ на марку.
+    const compat = await this.buildCompatibilityFilter(query);
+    if (compat) where.compatibilities = { some: compat };
     if (query.priceMin !== undefined || query.priceMax !== undefined) {
       where.price = {};
       if (query.priceMin !== undefined) where.price.gte = new Prisma.Decimal(query.priceMin);
@@ -333,6 +338,54 @@ export class ProductsService {
   // -------------------------------------------------------------------------
   // helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * Строит условие ProductCompatibilityWhereInput из переданных car* фильтров.
+   * Раскручивает иерархию: модификация → модель → марка, чтобы товар совместимый
+   * с маркой автоматически считался совместимым с модификацией этой марки.
+   */
+  private async buildCompatibilityFilter(
+    query: ListProductsDto,
+  ): Promise<Prisma.ProductCompatibilityWhereInput | null> {
+    if (query.carModificationId) {
+      const mod = await this.prisma.carModification.findUnique({
+        where: { id: query.carModificationId },
+        include: { generation: { select: { modelId: true, model: { select: { makeId: true } } } } },
+      });
+      if (!mod) return null;
+      return {
+        OR: [
+          { carModificationId: query.carModificationId },
+          { carModelId: mod.generation.modelId },
+          { carMakeId: mod.generation.model.makeId },
+        ],
+      };
+    }
+    if (query.carModelId) {
+      const model = await this.prisma.carModel.findUnique({
+        where: { id: query.carModelId },
+        select: { makeId: true, id: true },
+      });
+      if (!model) return null;
+      return {
+        OR: [
+          { carModelId: model.id },
+          { carMakeId: model.makeId },
+          { carModification: { generation: { modelId: model.id } } },
+        ],
+      };
+    }
+    if (query.carMakeId) {
+      return {
+        OR: [
+          { carMakeId: query.carMakeId },
+          { carModel: { makeId: query.carMakeId } },
+          { carModification: { generation: { model: { makeId: query.carMakeId } } } },
+        ],
+      };
+    }
+    return null;
+  }
 
   private async ensureOwnership(merchantId: string, productId: string): Promise<void> {
     const product = await this.prisma.product.findFirst({

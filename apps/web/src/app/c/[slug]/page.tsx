@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { CategoryCarFilter } from '@/components/catalog/category-car-filter';
 import { ProductCard } from '@/components/home/product-card';
 import { serverApi } from '@/lib/api-client';
 import type { Category, Paginated, Product } from '@/lib/types';
@@ -11,7 +12,16 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: { slug: string };
-  searchParams: { page?: string; sort?: string; priceMin?: string; priceMax?: string };
+  searchParams: {
+    page?: string;
+    sort?: string;
+    priceMin?: string;
+    priceMax?: string;
+    makeId?: string;
+    makeName?: string;
+    modelId?: string;
+    modelName?: string;
+  };
 }
 
 export async function generateMetadata({ params }: PageProps) {
@@ -47,6 +57,8 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   });
   if (searchParams.priceMin) qs.set('priceMin', searchParams.priceMin);
   if (searchParams.priceMax) qs.set('priceMax', searchParams.priceMax);
+  if (searchParams.makeId) qs.set('carMakeId', searchParams.makeId);
+  if (searchParams.modelId) qs.set('carModelId', searchParams.modelId);
 
   const products = await api<Paginated<Product>>(`/products?${qs.toString()}`);
 
@@ -64,6 +76,17 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         <h1 className="text-xl font-bold md:text-3xl">{pickLocale(category.name)}</h1>
         <p className="text-xs text-muted-foreground">Найдено: {products.meta.total}</p>
       </div>
+
+      {/* Фильтр по автомобилю */}
+      <CategoryCarFilter
+        slug={params.slug}
+        initial={{
+          makeId: searchParams.makeId,
+          makeName: searchParams.makeName,
+          modelId: searchParams.modelId,
+          modelName: searchParams.modelName,
+        }}
+      />
 
       {/* Подкатегории как чипы */}
       {category.children && category.children.length > 0 ? (

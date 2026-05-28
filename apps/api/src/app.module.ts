@@ -8,6 +8,7 @@ import { PrismaModule } from './infrastructure/database/prisma.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BannersModule } from './modules/banners/banners.module';
+import { CarsModule } from './modules/cars/cars.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { FinanceModule } from './modules/finance/finance.module';
@@ -45,6 +46,7 @@ import { UsersModule } from './modules/users/users.module';
     UsersModule,
     CatalogModule,
     BannersModule,
+    CarsModule,
     CartModule,
     OrdersModule,
     ReturnsModule,

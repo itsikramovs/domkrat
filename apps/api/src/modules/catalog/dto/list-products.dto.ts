@@ -88,4 +88,19 @@ export class ListProductsDto {
   @Transform(({ value }) => value === true || value === 'true' || value === '1')
   @IsBoolean()
   isNew?: boolean;
+
+  @ApiPropertyOptional({ description: 'Совместимо с маркой' })
+  @IsOptional()
+  @IsUUID()
+  carMakeId?: string;
+
+  @ApiPropertyOptional({ description: 'Совместимо с моделью' })
+  @IsOptional()
+  @IsUUID()
+  carModelId?: string;
+
+  @ApiPropertyOptional({ description: 'Совместимо с модификацией' })
+  @IsOptional()
+  @IsUUID()
+  carModificationId?: string;
 }

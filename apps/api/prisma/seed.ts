@@ -914,12 +914,12 @@ async function seedProducts(): Promise<void> {
   const brakePadsProduct = await prisma.product.findFirst({
     where: { sku: 'BREMBO-P83024' },
   });
+  const camryModificationId = '40000000-0000-4000-8000-000000000010';
   if (brakePadsProduct) {
     const mod = await prisma.carModification.findUnique({
-      where: { id: '40000000-0000-4000-8000-000000000010' },
+      where: { id: camryModificationId },
     });
     if (mod) {
-      // Используем составной upsert вручную (нет уникального индекса)
       const existing = await prisma.productCompatibility.findFirst({
         where: { productId: brakePadsProduct.id, carModificationId: mod.id },
       });
@@ -931,7 +931,28 @@ async function seedProducts(): Promise<void> {
     }
   }
 
-  console.log(`  • products: ${products.length}, +1 compatibility link`);
+  // Демо UserGarage с VIN для теста /search/by-vin
+  // VIN из реального Toyota Camry XV40: JTNBE40K003123456
+  const customer = await prisma.user.findFirst({ where: { email: 'customer1@example.com' } });
+  if (customer) {
+    const existing = await prisma.userGarage.findFirst({
+      where: { userId: customer.id, vin: 'JTNBE40K003123456' },
+    });
+    if (!existing) {
+      await prisma.userGarage.create({
+        data: {
+          userId: customer.id,
+          vin: 'JTNBE40K003123456',
+          carModificationId: camryModificationId,
+          year: 2010,
+          nickname: 'Toyota Camry',
+          isPrimary: true,
+        },
+      });
+    }
+  }
+
+  console.log(`  • products: ${products.length}, +1 compatibility link, +1 demo VIN`);
 }
 
 // ---------------------------------------------------------------------------

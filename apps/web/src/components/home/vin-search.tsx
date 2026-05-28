@@ -1,9 +1,10 @@
 'use client';
 
-import { Camera, ChevronRight, Search } from 'lucide-react';
+import { Camera, Car, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { CarPicker, type SelectedCar } from '@/components/car-picker';
 import { cn } from '@/lib/utils';
 
 type Tab = 'vin' | 'details';
@@ -12,13 +13,30 @@ export function VinSearch() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('vin');
   const [vin, setVin] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submitVin = (e: React.FormEvent) => {
     e.preventDefault();
     const q = vin.trim();
     if (q.length >= 6) {
       router.push(`/search?vin=${encodeURIComponent(q)}`);
     }
+  };
+
+  const applyCar = (s: SelectedCar) => {
+    setPickerOpen(false);
+    const params = new URLSearchParams();
+    params.set('makeId', s.makeId);
+    params.set('makeName', s.makeName);
+    if (s.modelId) {
+      params.set('modelId', s.modelId);
+      params.set('modelName', s.modelName ?? '');
+    }
+    if (s.modificationId) {
+      params.set('modificationId', s.modificationId);
+      params.set('modificationName', s.modificationName ?? '');
+    }
+    router.push(`/search?${params.toString()}`);
   };
 
   return (
@@ -45,12 +63,12 @@ export function VinSearch() {
             tab === 'details' ? 'bg-white text-foreground' : 'text-white/80',
           )}
         >
-          Подробнее
+          Марка / Модель
         </button>
       </div>
 
       {tab === 'vin' ? (
-        <form onSubmit={submit} className="relative mt-3 flex flex-col gap-2">
+        <form onSubmit={submitVin} className="relative mt-3 flex flex-col gap-2">
           <div className="relative">
             <input
               value={vin}
@@ -78,14 +96,19 @@ export function VinSearch() {
         <div className="relative mt-3 space-y-2">
           <button
             type="button"
-            onClick={() => router.push('/catalog')}
+            onClick={() => setPickerOpen(true)}
             className="flex w-full items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-medium"
           >
-            <span>Выбрать марку и модель</span>
-            <ChevronRight className="h-4 w-4" />
+            <span className="inline-flex items-center gap-2">
+              <Car className="h-4 w-4" />
+              Выбрать марку и модель
+            </span>
+            <span className="text-xs text-white/60">→</span>
           </button>
         </div>
       )}
+
+      <CarPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={applyCar} minDepth="model" />
     </div>
   );
 }
