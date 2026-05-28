@@ -3,6 +3,7 @@ import { CarOnboarding } from '@/components/home/car-onboarding';
 import { CategoryTile } from '@/components/home/category-tile';
 import { HeroBanner } from '@/components/home/hero-banner';
 import { HorizontalProducts } from '@/components/home/horizontal-products';
+import { MyCarProducts } from '@/components/home/my-car-products';
 import { ProductCard } from '@/components/home/product-card';
 import { SecondaryBanner } from '@/components/home/secondary-banner';
 import { SectionHeader } from '@/components/home/section-header';
@@ -65,6 +66,9 @@ export default async function HomePage() {
       </section>
 
       <CarOnboarding />
+
+      {/* Если у пользователя есть primary авто — секция совместимых товаров */}
+      <MyCarProducts />
 
       <section>
         <SectionHeader title="Товары сезона" href="/c/tires-and-wheels" />
