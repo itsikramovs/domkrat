@@ -115,7 +115,13 @@ export interface UserAddress {
   city: string;
   district: string | null;
   addressLine: string;
+  landmark?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   isDefault: boolean;
+  isLegalEntity?: boolean;
+  companyName?: string | null;
+  taxId?: string | null;
 }
 
 export interface OrderItem {

@@ -1,16 +1,18 @@
 'use client';
 
+import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { AddressForm } from '@/components/address-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCart } from '@/lib/api/cart';
 import { useCreateOrder, usePayOrder, type CreateOrderInput } from '@/lib/api/orders';
-import { useAddresses } from '@/lib/api/users';
+import { useAddresses, useCreateAddress } from '@/lib/api/users';
 import { ApiHttpError } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/auth-store';
 import { formatPrice, pickLocale } from '@/lib/utils';
@@ -37,6 +39,7 @@ export default function CheckoutPage() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const cart = useCart();
   const addresses = useAddresses();
+  const createAddress = useCreateAddress();
   const createOrder = useCreateOrder();
   const payOrder = usePayOrder();
 
@@ -44,6 +47,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<CreateOrderInput['paymentMethod']>('MOCK');
   const [addressId, setAddressId] = useState<string>('');
   const [notes, setNotes] = useState('');
+  const [addingAddress, setAddingAddress] = useState(false);
 
   useEffect(() => {
     if (accessToken === null) router.push('/login?next=/checkout');
@@ -134,8 +138,21 @@ export default function CheckoutPage() {
         {deliveryMethod !== 'SELF_PICKUP' ? (
           <Card>
             <CardContent className="p-6 space-y-3">
-              <h2 className="font-semibold">Адрес доставки</h2>
-              {addresses.data && addresses.data.length > 0 ? (
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold">Адрес доставки</h2>
+                {!addingAddress && addresses.data && addresses.data.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setAddingAddress(true)}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Новый адрес
+                  </button>
+                ) : null}
+              </div>
+
+              {!addingAddress && addresses.data && addresses.data.length > 0 ? (
                 addresses.data.map((a) => (
                   <label
                     key={a.id}
@@ -161,12 +178,36 @@ export default function CheckoutPage() {
                     </div>
                   </label>
                 ))
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  У вас нет адресов. Добавьте в{' '}
-                  <a href="/account/addresses" className="text-primary underline">профиле</a>.
+              ) : null}
+
+              {addingAddress || (addresses.data && addresses.data.length === 0) ? (
+                <div className="rounded-lg border bg-secondary/30 p-3">
+                  <AddressForm
+                    busy={createAddress.isPending}
+                    submitLabel="Сохранить и выбрать"
+                    onCancel={
+                      addresses.data && addresses.data.length > 0
+                        ? () => setAddingAddress(false)
+                        : undefined
+                    }
+                    onSubmit={async (input) => {
+                      try {
+                        const created = await createAddress.mutateAsync({
+                          ...input,
+                          isDefault: input.isDefault ?? (addresses.data?.length === 0),
+                        });
+                        setAddressId(created.id);
+                        setAddingAddress(false);
+                        toast.success('Адрес добавлен');
+                      } catch (error) {
+                        toast.error(
+                          error instanceof ApiHttpError ? error.body.message : 'Ошибка',
+                        );
+                      }
+                    }}
+                  />
                 </div>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         ) : null}
