@@ -22,6 +22,11 @@
     "test": {
       "outputs": ["coverage/**"],
       "dependsOn": ["^build"]
+    },
+    "test:e2e": {
+      "outputs": [],
+      "dependsOn": ["^build"],
+      "cache": false
     }
   }
 }
