@@ -627,29 +627,20 @@ async function seedCars(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 async function seedProducts(): Promise<void> {
-  const categoryConsum = await prisma.category.findUnique({ where: { slug: 'consumables' } });
-  const categoryBrake = await prisma.category.findUnique({ where: { slug: 'brake-system' } });
-  const categoryFluids = await prisma.category.findUnique({ where: { slug: 'fluids' } });
-  const categoryTires = await prisma.category.findUnique({ where: { slug: 'tires-and-wheels' } });
-  const bosch = await prisma.brand.findUnique({ where: { name: 'Bosch' } });
-  const mann = await prisma.brand.findUnique({ where: { name: 'Mann' } });
-  const brembo = await prisma.brand.findUnique({ where: { name: 'Brembo' } });
-  const castrol = await prisma.brand.findUnique({ where: { name: 'Castrol' } });
-  const continental = await prisma.brand.findUnique({ where: { name: 'Continental' } });
-
-  if (
-    !categoryConsum ||
-    !categoryBrake ||
-    !categoryFluids ||
-    !categoryTires ||
-    !bosch ||
-    !mann ||
-    !brembo ||
-    !castrol ||
-    !continental
-  ) {
-    throw new Error('Categories/brands not seeded properly');
+  // Категории
+  const cats = await prisma.category.findMany({
+    where: { slug: { in: ['fluids', 'tires-and-wheels', 'body-parts', 'interior', 'consumables', 'brake-system', 'engine-parts', 'electrical', 'suspension', 'accessories'] } },
+    select: { id: true, slug: true },
+  });
+  const catBySlug = Object.fromEntries(cats.map((c) => [c.slug, c.id])) as Record<string, string>;
+  for (const slug of ['fluids', 'tires-and-wheels', 'body-parts', 'interior', 'consumables', 'brake-system', 'engine-parts', 'electrical', 'suspension', 'accessories']) {
+    if (!catBySlug[slug]) throw new Error(`Category ${slug} not seeded`);
   }
+
+  // Бренды (берём по name; не падаем если бренда нет — оставим brandId=null)
+  const brands = await prisma.brand.findMany({ select: { id: true, name: true } });
+  const brandByName = Object.fromEntries(brands.map((b) => [b.name, b.id])) as Record<string, string>;
+  const B = (n: string): string | undefined => brandByName[n];
 
   type ProductSeed = {
     slug: string;
@@ -657,7 +648,7 @@ async function seedProducts(): Promise<void> {
     nameRu: string;
     nameUz: string;
     categoryId: string;
-    brandId: string;
+    brandId?: string;
     merchantId: string;
     oemNumber?: string;
     price: string;
@@ -668,222 +659,157 @@ async function seedProducts(): Promise<void> {
     isNew?: boolean;
   };
 
+  const M1 = ID.merchant.type1;
+  const M2 = ID.merchant.type2;
+
   const products: ProductSeed[] = [
-    {
-      slug: 'tire-bridgestone-blizzak-185-65-r15',
-      sku: 'BRIDGESTONE-BLIZZAK-185-65-R15',
-      nameRu: 'Шины зимние Bridgestone Blizzak 185/65 R15',
-      nameUz: 'Qishki shinalar Bridgestone Blizzak 185/65 R15',
-      categoryId: categoryTires.id,
-      brandId: continental.id,
-      merchantId: ID.merchant.type1,
-      price: '735000',
-      compareAtPrice: '1050000',
-      weight: '7.500',
-      isFeatured: true,
-      isOnSale: true,
-    },
-    {
-      slug: 'tire-michelin-pilot-sport-205-55-r16',
-      sku: 'MICHELIN-PS4-205-55-R16',
-      nameRu: 'Шины летние Michelin Pilot Sport 4 205/55 R16',
-      nameUz: 'Yozgi shinalar Michelin Pilot Sport 4 205/55 R16',
-      categoryId: categoryTires.id,
-      brandId: continental.id,
-      merchantId: ID.merchant.type2,
-      price: '890000',
-      weight: '9.000',
-      isFeatured: true,
-    },
-    {
-      slug: 'engine-oil-shell-helix-ultra-5w40-4l',
-      sku: 'SHELL-HELIX-5W40-4L',
-      nameRu: 'Масло моторное Shell Helix Ultra 5W-40 4 л',
-      nameUz: 'Motor moyi Shell Helix Ultra 5W-40 4 l',
-      categoryId: categoryFluids.id,
-      brandId: castrol.id,
-      merchantId: ID.merchant.type1,
-      price: '420000',
-      compareAtPrice: '480000',
-      weight: '3.700',
-      isFeatured: true,
-      isOnSale: true,
-    },
-    {
-      slug: 'engine-oil-mobil1-5w30-4l',
-      sku: 'MOBIL1-5W30-4L',
-      nameRu: 'Масло моторное JC ES 5W-30 синтетическое, 4 л',
-      nameUz: 'Motor moyi JC ES 5W-30 sintetik, 4 l',
-      categoryId: categoryFluids.id,
-      brandId: castrol.id,
-      merchantId: ID.merchant.type2,
-      price: '380000',
-      weight: '3.700',
-      isNew: true,
-    },
-    {
-      slug: 'headlight-led-camry-2019-2024',
-      sku: 'LED-CAMRY-19-24',
-      nameRu: 'Фара передняя левая LED для Toyota Camry 2019—2024',
-      nameUz: 'Old chap LED faraTo Toyota Camry 2019—2024',
-      categoryId: categoryBrake.id,
-      brandId: brembo.id,
-      merchantId: ID.merchant.type1,
-      price: '1240000',
-      compareAtPrice: '1480000',
-      weight: '3.000',
-      isOnSale: true,
-      isFeatured: true,
-    },
-    {
-      slug: 'floor-mats-cobalt-3d',
-      sku: 'MATS-COBALT-3D',
-      nameRu: 'Коврики салона резиновые 3D EVA для Chevrolet Cobalt',
-      nameUz: 'Chevrolet Cobalt uchun 3D EVA gilamchalari',
-      categoryId: categoryConsum.id,
-      brandId: bosch.id,
-      merchantId: ID.merchant.type1,
-      price: '485000',
-      compareAtPrice: '625000',
-      weight: '2.500',
-      isOnSale: true,
-      isFeatured: true,
-    },
-    {
-      slug: 'seat-covers-universal-4',
-      sku: 'COVERS-UNI-4',
-      nameRu: 'Чехлы универсальные текстильные, комплект 4 шт.',
-      nameUz: 'Universal chexollar, 4 dona to\'plam',
-      categoryId: categoryConsum.id,
-      brandId: bosch.id,
-      merchantId: ID.merchant.type2,
-      price: '185000',
-      weight: '1.800',
-      isFeatured: true,
-    },
-    {
-      slug: 'turtle-wax-polish-t478',
-      sku: 'TW-T478',
-      nameRu: 'Полироль для кузова Turtle Wax T-478 Original',
-      nameUz: 'Korpus polishi Turtle Wax T-478 Original',
-      categoryId: categoryConsum.id,
-      brandId: castrol.id,
-      merchantId: ID.merchant.type1,
-      price: '85000',
-      weight: '0.450',
-      isFeatured: true,
-    },
-    {
-      slug: 'sonax-gloss-shampoo-1l',
-      sku: 'SONAX-GLOSS-1L',
-      nameRu: 'Шампунь автомобильный Sonax Gloss Shampoo 1 л',
-      nameUz: 'Sonax Gloss avtomobil shampuni 1 l',
-      categoryId: categoryConsum.id,
-      brandId: castrol.id,
-      merchantId: ID.merchant.type2,
-      price: '125000',
-      weight: '1.000',
-      isFeatured: true,
-    },
-    {
-      slug: 'osram-night-breaker-h7-50w',
-      sku: 'OSRAM-NB-H7',
-      nameRu: 'Лампа галогенная Osram Night Breaker H7 12V 55W',
-      nameUz: 'Osram Night Breaker H7 12V 55W chiroq lampasi',
-      categoryId: categoryConsum.id,
-      brandId: bosch.id,
-      merchantId: ID.merchant.type1,
-      price: '125000',
-      weight: '0.060',
-      isFeatured: true,
-    },
-    {
-      slug: 'starter-relay-12v',
-      sku: 'STARTER-REL-12V',
-      nameRu: 'Реле стартера 12V Behr Hella 4MD003520-08',
-      nameUz: 'Starter rele 12V Behr Hella 4MD003520-08',
-      categoryId: categoryConsum.id,
-      brandId: bosch.id,
-      merchantId: ID.merchant.type2,
-      price: '85000',
-      weight: '0.150',
-      isFeatured: true,
-    },
-    {
-      slug: 'air-filter-bosch-1457433721',
-      sku: 'BOSCH-1457433721',
-      nameRu: 'Воздушный фильтр Bosch 1457433721',
-      nameUz: 'Havo filtri Bosch 1457433721',
-      categoryId: categoryConsum.id,
-      brandId: bosch.id,
-      merchantId: ID.merchant.type1,
-      oemNumber: '1457433721',
-      price: '85000',
-      weight: '0.300',
-    },
-    {
-      slug: 'oil-filter-mann-w7124',
-      sku: 'MANN-W7124',
-      nameRu: 'Масляный фильтр Mann W 712/4',
-      nameUz: 'Yog\' filtri Mann W 712/4',
-      categoryId: categoryConsum.id,
-      brandId: mann.id,
-      merchantId: ID.merchant.type1,
-      oemNumber: 'W712/4',
-      price: '52000',
-      weight: '0.250',
-    },
-    {
-      slug: 'brake-pads-brembo-p83024',
-      sku: 'BREMBO-P83024',
-      nameRu: 'Колодки тормозные передние Brembo P 83 024',
-      nameUz: 'Old tormoz kolodkalari Brembo P 83 024',
-      categoryId: categoryBrake.id,
-      brandId: brembo.id,
-      merchantId: ID.merchant.type1,
-      oemNumber: '04465-33450',
-      price: '420000',
-      weight: '1.500',
-    },
-    {
-      slug: 'engine-oil-castrol-magnatec-5w40-4l',
-      sku: 'CASTROL-MAG-5W40-4L',
-      nameRu: 'Масло моторное Castrol Magnatec 5W-40 4 л',
-      nameUz: 'Motor moyi Castrol Magnatec 5W-40 4 l',
-      categoryId: categoryFluids.id,
-      brandId: castrol.id,
-      merchantId: ID.merchant.type1,
-      price: '380000',
-      weight: '3.700',
-    },
-    {
-      slug: 'tire-continental-205-55-r16',
-      sku: 'CONTI-205-55-R16',
-      nameRu: 'Шина Continental ContiPremiumContact 5 205/55 R16',
-      nameUz: 'Shina Continental ContiPremiumContact 5 205/55 R16',
-      categoryId: categoryTires.id,
-      brandId: continental.id,
-      merchantId: ID.merchant.type2,
-      price: '950000',
-      weight: '9.500',
-    },
+    // =========================================================================
+    // FLUIDS — Моторные масла, антифризы, тормозная жидкость (10 шт)
+    // =========================================================================
+    { slug: 'engine-oil-shell-helix-ultra-5w40-4l', sku: 'SHELL-HELIX-5W40-4L', nameRu: 'Масло моторное Shell Helix Ultra 5W-40, 4 л', nameUz: 'Motor moyi Shell Helix Ultra 5W-40, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Castrol'), merchantId: M1, price: '420000', compareAtPrice: '480000', weight: '3.700', isFeatured: true, isOnSale: true },
+    { slug: 'engine-oil-mobil1-esp-5w30-4l', sku: 'MOBIL1-ESP-5W30-4L', nameRu: 'Масло моторное Mobil 1 ESP 5W-30 синтетическое, 4 л', nameUz: 'Mobil 1 ESP 5W-30 sintetik motor moyi, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Mobil 1'), merchantId: M2, price: '480000', weight: '3.700', isNew: true },
+    { slug: 'engine-oil-castrol-magnatec-5w40-4l', sku: 'CASTROL-MAG-5W40-4L', nameRu: 'Масло моторное Castrol Magnatec 5W-40, 4 л', nameUz: 'Castrol Magnatec 5W-40 motor moyi, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Castrol'), merchantId: M1, price: '380000', weight: '3.700' },
+    { slug: 'engine-oil-liqui-moly-top-tec-4200-5w30-4l', sku: 'LM-TT4200-5W30', nameRu: 'Масло моторное Liqui Moly Top Tec 4200 5W-30, 4 л', nameUz: 'Liqui Moly Top Tec 4200 5W-30 moy, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Mahle'), merchantId: M2, price: '520000', compareAtPrice: '580000', weight: '3.700', isOnSale: true },
+    { slug: 'engine-oil-zic-x9-5w40-4l', sku: 'ZIC-X9-5W40-4L', nameRu: 'Масло моторное ZIC X9 5W-40 синтетическое, 4 л', nameUz: 'ZIC X9 5W-40 sintetik motor moyi, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Denso'), merchantId: M1, price: '310000', weight: '3.700' },
+    { slug: 'engine-oil-lukoil-genesis-5w30-4l', sku: 'LUKOIL-GEN-5W30-4L', nameRu: 'Масло моторное Лукойл Genesis 5W-30, 4 л', nameUz: 'Lukoil Genesis 5W-30 motor moyi, 4 l', categoryId: catBySlug['fluids']!, brandId: B('Castrol'), merchantId: M2, price: '245000', weight: '3.700' },
+    { slug: 'gearbox-oil-atf-type-iv-1l', sku: 'ATF-TYPE-IV-1L', nameRu: 'Масло трансмиссионное АКПП ATF Type IV, 1 л', nameUz: 'Avtomat uzatma yog\'i ATF Type IV, 1 l', categoryId: catBySlug['fluids']!, brandId: B('Castrol'), merchantId: M1, price: '95000', weight: '0.900' },
+    { slug: 'antifreeze-felix-g12-5l', sku: 'FELIX-G12-5L', nameRu: 'Антифриз Felix Carbox G12+ красный, 5 л', nameUz: 'Felix Carbox G12+ qizil antifriz, 5 l', categoryId: catBySlug['fluids']!, brandId: B('Bosch'), merchantId: M2, price: '125000', compareAtPrice: '150000', weight: '5.200', isOnSale: true },
+    { slug: 'coolant-tosol-a40m-10l', sku: 'TOSOL-A40M-10L', nameRu: 'Охлаждающая жидкость Тосол А-40М, 10 л', nameUz: 'Tosol A-40M sovutkich suyuqligi, 10 l', categoryId: catBySlug['fluids']!, brandId: B('Bosch'), merchantId: M1, price: '85000', weight: '10.500' },
+    { slug: 'brake-fluid-dot4-1l', sku: 'DOT4-1L', nameRu: 'Тормозная жидкость DOT-4, 1 л', nameUz: 'DOT-4 tormoz suyuqligi, 1 l', categoryId: catBySlug['fluids']!, brandId: B('Brembo'), merchantId: M2, price: '45000', weight: '1.100', isFeatured: true },
+
+    // =========================================================================
+    // TIRES & WHEELS — Шины и диски (10 шт)
+    // =========================================================================
+    { slug: 'tire-bridgestone-blizzak-185-65-r15', sku: 'BRIDGESTONE-BLIZZAK-185-65-R15', nameRu: 'Шины зимние Bridgestone Blizzak 185/65 R15', nameUz: 'Bridgestone Blizzak qishki shinalar 185/65 R15', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M1, price: '735000', compareAtPrice: '1050000', weight: '7.500', isFeatured: true, isOnSale: true },
+    { slug: 'tire-michelin-pilot-sport-205-55-r16', sku: 'MICHELIN-PS4-205-55-R16', nameRu: 'Шины летние Michelin Pilot Sport 4 205/55 R16', nameUz: 'Michelin Pilot Sport 4 yozgi shinalar 205/55 R16', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M2, price: '890000', weight: '9.000', isFeatured: true },
+    { slug: 'tire-continental-205-55-r16', sku: 'CONTI-205-55-R16', nameRu: 'Шина Continental ContiPremiumContact 5 205/55 R16', nameUz: 'Continental ContiPremiumContact 5 205/55 R16', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M2, price: '950000', weight: '9.500' },
+    { slug: 'tire-yokohama-bluearth-195-65-r15', sku: 'YOKO-BE-195-65-R15', nameRu: 'Шины летние Yokohama BluEarth-GT AE51 195/65 R15', nameUz: 'Yokohama BluEarth-GT AE51 195/65 R15', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M1, price: '680000', weight: '8.000', isNew: true },
+    { slug: 'tire-hankook-winter-205-55-r16', sku: 'HANKOOK-W-205-55-R16', nameRu: 'Шины зимние Hankook Winter i*cept RS3 205/55 R16', nameUz: 'Hankook Winter i*cept RS3 qishki shinalar 205/55 R16', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M2, price: '720000', compareAtPrice: '850000', weight: '9.000', isOnSale: true },
+    { slug: 'tire-nokian-hakkapeliitta-215-65-r16', sku: 'NOKIAN-HKP-215-65-R16', nameRu: 'Шины зимние Nokian Hakkapeliitta R3 SUV 215/65 R16', nameUz: 'Nokian Hakkapeliitta R3 SUV 215/65 R16', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M1, price: '1180000', weight: '11.000' },
+    { slug: 'alloy-wheel-replica-r16-toyota-camry', sku: 'WHEEL-REPL-R16-CAMRY', nameRu: 'Литой диск Replica TY15 16x6.5 5x114.3 ET45 для Toyota', nameUz: 'Replica TY15 16x6.5 5x114.3 ET45 quyma disk', categoryId: catBySlug['tires-and-wheels']!, merchantId: M2, price: '485000', weight: '8.500' },
+    { slug: 'hubcap-r15-vaz', sku: 'HUBCAP-R15-VAZ', nameRu: 'Колпак колеса R15 для ВАЗ универсальный, 4 шт.', nameUz: 'VAZ uchun R15 g\'ildirak qopqog\'i, 4 dona', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Lada'), merchantId: M1, price: '95000', weight: '2.000' },
+    { slug: 'wheel-bolts-m12x1-5-20', sku: 'BOLTS-M12-1.5-20', nameRu: 'Болты колёсные М12х1.5х30, конус, комплект 20 шт.', nameUz: 'G\'ildirak boltlari M12x1.5x30, konus, 20 dona', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Bosch'), merchantId: M2, price: '85000', weight: '1.500' },
+    { slug: 'tpms-sensor-433', sku: 'TPMS-433-4', nameRu: 'Датчики давления шин TPMS 433MHz, комплект 4 шт.', nameUz: 'TPMS 433MHz shina bosim datchiklari, 4 dona', categoryId: catBySlug['tires-and-wheels']!, brandId: B('Continental'), merchantId: M1, price: '320000', weight: '0.400', isNew: true },
+
+    // =========================================================================
+    // BODY-PARTS — Кузовные (10 шт)
+    // =========================================================================
+    { slug: 'headlight-led-camry-2019-2024', sku: 'LED-CAMRY-19-24', nameRu: 'Фара передняя левая LED для Toyota Camry XV70 2019—2024', nameUz: 'Toyota Camry XV70 2019—2024 uchun chap LED faraTo', categoryId: catBySlug['body-parts']!, brandId: B('Toyota'), merchantId: M1, price: '1240000', compareAtPrice: '1480000', weight: '3.000', isOnSale: true, isFeatured: true },
+    { slug: 'bumper-front-nexia3', sku: 'BUMPER-NEX3-FR', nameRu: 'Бампер передний Chevrolet Nexia 3 (без отверстий)', nameUz: 'Chevrolet Nexia 3 old bamperi', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M2, price: '385000', weight: '5.000' },
+    { slug: 'hood-cobalt', sku: 'HOOD-COBALT', nameRu: 'Капот Chevrolet Cobalt 2013-2020 (грунтованный)', nameUz: 'Chevrolet Cobalt 2013-2020 kapoti', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M1, price: '920000', compareAtPrice: '1100000', weight: '14.000', isOnSale: true },
+    { slug: 'fender-front-right-spark', sku: 'FENDER-SPARK-FR', nameRu: 'Крыло переднее правое Chevrolet Spark M300', nameUz: 'Chevrolet Spark M300 o\'ng old qanot', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M2, price: '285000', weight: '4.500' },
+    { slug: 'mirror-side-left-lacetti', sku: 'MIRROR-LACETTI-L', nameRu: 'Зеркало боковое левое электр. Chevrolet Lacetti', nameUz: 'Chevrolet Lacetti chap elektr ko\'zgu', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M1, price: '195000', weight: '0.800' },
+    { slug: 'grille-radiator-nexia3', sku: 'GRILLE-NEX3', nameRu: 'Решётка радиатора Chevrolet Nexia 3 хром', nameUz: 'Chevrolet Nexia 3 xrom radiator panjarasi', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M2, price: '125000', weight: '0.900', isFeatured: true },
+    { slug: 'windshield-laminated-camry-xv50', sku: 'WS-CAMRY-XV50', nameRu: 'Стекло лобовое триплекс Toyota Camry XV50 2011-2017', nameUz: 'Toyota Camry XV50 2011-2017 old triplex oynasi', categoryId: catBySlug['body-parts']!, brandId: B('Toyota'), merchantId: M1, price: '1850000', weight: '18.000' },
+    { slug: 'door-moulding-universal', sku: 'MOULDING-UNI-4', nameRu: 'Молдинги дверей универсальные хром, комплект 4 шт.', nameUz: 'Eshik xrom moldinglari, 4 dona', categoryId: catBySlug['body-parts']!, merchantId: M2, price: '65000', weight: '0.500' },
+    { slug: 'sill-trim-camry', sku: 'SILL-CAMRY', nameRu: 'Накладки на пороги Toyota Camry с подсветкой 4 шт.', nameUz: 'Toyota Camry yorug\'lik bilan porog qoplamalari, 4 dona', categoryId: catBySlug['body-parts']!, brandId: B('Toyota'), merchantId: M1, price: '180000', compareAtPrice: '220000', weight: '0.800', isOnSale: true },
+    { slug: 'rear-light-tail-cobalt', sku: 'TAIL-COBALT-R', nameRu: 'Фонарь задний правый Chevrolet Cobalt', nameUz: 'Chevrolet Cobalt o\'ng orqa chiroq', categoryId: catBySlug['body-parts']!, brandId: B('Chevrolet'), merchantId: M2, price: '215000', weight: '1.200' },
+
+    // =========================================================================
+    // INTERIOR — Салон, чехлы, аксессуары салона (10 шт)
+    // =========================================================================
+    { slug: 'seat-covers-universal-4', sku: 'COVERS-UNI-4', nameRu: 'Чехлы автомобильные универсальные текстильные, комплект 4 шт.', nameUz: 'Universal mato chexollari, 4 dona', categoryId: catBySlug['interior']!, brandId: B('Bosch'), merchantId: M2, price: '185000', weight: '1.800', isFeatured: true },
+    { slug: 'seat-covers-camry-eco-leather', sku: 'COVERS-CAMRY-ECO', nameRu: 'Чехлы экокожа модельные для Toyota Camry, комплект', nameUz: 'Toyota Camry uchun ekokoja chexollari, to\'plam', categoryId: catBySlug['interior']!, brandId: B('Toyota'), merchantId: M1, price: '780000', compareAtPrice: '950000', weight: '4.500', isOnSale: true, isFeatured: true },
+    { slug: 'seat-pad-massage', sku: 'PAD-MASSAGE', nameRu: 'Накидка на сиденье массажная с подогревом 12V', nameUz: 'Isitiladigan massajli o\'rindiq qoplamasi 12V', categoryId: catBySlug['interior']!, merchantId: M2, price: '245000', weight: '1.500', isNew: true },
+    { slug: 'armrest-universal', sku: 'ARMREST-UNI', nameRu: 'Подлокотник универсальный с боксом, экокожа', nameUz: 'Quti bilan universal qo\'l tayanchi, ekokoja', categoryId: catBySlug['interior']!, merchantId: M1, price: '125000', weight: '1.200' },
+    { slug: 'steering-wheel-cover-leather', sku: 'SWC-LEATHER', nameRu: 'Оплётка на руль кожа натуральная M (37-39 см)', nameUz: 'Tabiiy charm rul qoplamasi M (37-39 sm)', categoryId: catBySlug['interior']!, merchantId: M2, price: '75000', weight: '0.250' },
+    { slug: 'neck-pillow-memory-2', sku: 'PILLOW-NECK-2', nameRu: 'Подушка под шею с эффектом памяти, 2 шт.', nameUz: 'Xotira effektli bo\'yin yostig\'i, 2 dona', categoryId: catBySlug['interior']!, merchantId: M1, price: '95000', weight: '0.400' },
+    { slug: 'trunk-organizer-foldable', sku: 'ORG-TRUNK-FOLD', nameRu: 'Органайзер в багажник складной 60л', nameUz: 'Yig\'iladigan yuk bo\'limi organayzeri 60l', categoryId: catBySlug['interior']!, merchantId: M2, price: '85000', weight: '0.900', isFeatured: true },
+    { slug: 'sun-shade-windshield', sku: 'SHADE-WS', nameRu: 'Накидка от солнца на лобовое стекло, серебристая', nameUz: 'Quyoshdan oldingi oynaga kumush qoplama', categoryId: catBySlug['interior']!, merchantId: M1, price: '35000', weight: '0.300' },
+    { slug: 'mirror-interior-panoramic', sku: 'MIRROR-PANO', nameRu: 'Зеркало салонное панорамное универсальное', nameUz: 'Salon panoramik ko\'zgu universal', categoryId: catBySlug['interior']!, merchantId: M2, price: '55000', weight: '0.400' },
+    { slug: 'phone-holder-magnetic', sku: 'HOLDER-MAGNET', nameRu: 'Магнитный держатель телефона на дефлектор', nameUz: 'Deflektorga magnitli telefon ushlagichi', categoryId: catBySlug['interior']!, merchantId: M1, price: '45000', compareAtPrice: '60000', weight: '0.150', isOnSale: true },
+
+    // =========================================================================
+    // CONSUMABLES — Расходники (10 шт)
+    // =========================================================================
+    { slug: 'air-filter-bosch-1457433721', sku: 'BOSCH-1457433721', nameRu: 'Воздушный фильтр Bosch 1457433721', nameUz: 'Bosch 1457433721 havo filtri', categoryId: catBySlug['consumables']!, brandId: B('Bosch'), merchantId: M1, oemNumber: '1457433721', price: '85000', weight: '0.300' },
+    { slug: 'oil-filter-mann-w7124', sku: 'MANN-W7124', nameRu: 'Масляный фильтр Mann W 712/4', nameUz: 'Mann W 712/4 yog\' filtri', categoryId: catBySlug['consumables']!, brandId: B('Mann'), merchantId: M1, oemNumber: 'W712/4', price: '52000', weight: '0.250' },
+    { slug: 'cabin-filter-mann-cuk2939', sku: 'MANN-CUK2939', nameRu: 'Салонный фильтр Mann CUK 2939 угольный', nameUz: 'Mann CUK 2939 koʻmir salon filtri', categoryId: catBySlug['consumables']!, brandId: B('Mann'), merchantId: M2, oemNumber: 'CUK2939', price: '78000', weight: '0.300' },
+    { slug: 'fuel-filter-mahle-kl83', sku: 'MAHLE-KL83', nameRu: 'Топливный фильтр Mahle KL 83', nameUz: 'Mahle KL 83 yoqilg\'i filtri', categoryId: catBySlug['consumables']!, brandId: B('Mahle'), merchantId: M1, oemNumber: 'KL83', price: '95000', weight: '0.250' },
+    { slug: 'spark-plugs-ngk-bkr6e-4', sku: 'NGK-BKR6E-4', nameRu: 'Свечи зажигания NGK BKR6E, комплект 4 шт.', nameUz: 'NGK BKR6E uchqun shamlari, 4 dona', categoryId: catBySlug['consumables']!, brandId: B('NGK'), merchantId: M2, oemNumber: 'BKR6E', price: '120000', weight: '0.250', isFeatured: true },
+    { slug: 'spark-plugs-denso-iridium-4', sku: 'DENSO-IK20-4', nameRu: 'Свечи иридиевые Denso IK20 IK20, 4 шт.', nameUz: 'Denso IK20 iridium shamlari, 4 dona', categoryId: catBySlug['consumables']!, brandId: B('Denso'), merchantId: M1, oemNumber: 'IK20', price: '280000', compareAtPrice: '340000', weight: '0.250', isOnSale: true },
+    { slug: 'wiper-blades-bosch-aerotwin-600-450', sku: 'BOSCH-AT-600-450', nameRu: 'Щётки стеклоочистителя Bosch Aerotwin 600+450 мм', nameUz: 'Bosch Aerotwin oyna tozalagich, 600+450 mm', categoryId: catBySlug['consumables']!, brandId: B('Bosch'), merchantId: M2, price: '145000', weight: '0.350', isFeatured: true },
+    { slug: 'lamp-h4-osram-night-breaker', sku: 'OSRAM-NB-H4', nameRu: 'Лампа галогенная Osram Night Breaker H4 12V 60/55W', nameUz: 'Osram Night Breaker H4 12V 60/55W galogen lampa', categoryId: catBySlug['consumables']!, brandId: B('Bosch'), merchantId: M1, price: '95000', weight: '0.080' },
+    { slug: 'osram-night-breaker-h7-50w', sku: 'OSRAM-NB-H7', nameRu: 'Лампа галогенная Osram Night Breaker H7 12V 55W', nameUz: 'Osram Night Breaker H7 12V 55W galogen lampa', categoryId: catBySlug['consumables']!, brandId: B('Bosch'), merchantId: M1, price: '125000', weight: '0.060', isFeatured: true },
+    { slug: 'floor-mats-cobalt-3d', sku: 'MATS-COBALT-3D', nameRu: 'Коврики салона 3D EVA для Chevrolet Cobalt, 5 шт.', nameUz: 'Chevrolet Cobalt uchun 3D EVA gilamchalari, 5 dona', categoryId: catBySlug['consumables']!, brandId: B('Chevrolet'), merchantId: M1, price: '485000', compareAtPrice: '625000', weight: '2.500', isOnSale: true, isFeatured: true },
+
+    // =========================================================================
+    // BRAKE-SYSTEM — Тормозная система (10 шт)
+    // =========================================================================
+    { slug: 'brake-pads-brembo-p83024', sku: 'BREMBO-P83024', nameRu: 'Колодки тормозные передние Brembo P 83 024', nameUz: 'Brembo P 83 024 old tormoz kolodkalari', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M1, oemNumber: '04465-33450', price: '420000', weight: '1.500' },
+    { slug: 'brake-pads-ate-13046072142', sku: 'ATE-13.0460-7214.2', nameRu: 'Колодки тормозные задние ATE 13.0460-7214.2', nameUz: 'ATE 13.0460-7214.2 orqa tormoz kolodkalari', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M2, oemNumber: '13.0460-7214.2', price: '285000', weight: '1.200' },
+    { slug: 'brake-disc-brembo-09a96211', sku: 'BREMBO-09A96211', nameRu: 'Тормозной диск передний Brembo 09.A962.11, 295mm', nameUz: 'Brembo 09.A962.11 old tormoz diski, 295mm', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M1, price: '680000', compareAtPrice: '780000', weight: '6.500', isOnSale: true, isFeatured: true },
+    { slug: 'brake-disc-rear-cobalt', sku: 'DISC-REAR-COBALT', nameRu: 'Тормозной диск задний для Chevrolet Cobalt 240mm', nameUz: 'Chevrolet Cobalt orqa tormoz diski 240mm', categoryId: catBySlug['brake-system']!, brandId: B('Chevrolet'), merchantId: M2, price: '385000', weight: '4.000' },
+    { slug: 'brake-hose-sachs-camry', sku: 'SACHS-HOSE-CAMRY', nameRu: 'Шланг тормозной передний Sachs для Toyota Camry', nameUz: 'Toyota Camry uchun Sachs old tormoz shlangi', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M1, price: '95000', weight: '0.200' },
+    { slug: 'brake-master-cylinder-tokico', sku: 'TOKICO-MC-CAMRY', nameRu: 'Главный тормозной цилиндр Tokico для Toyota Camry XV40', nameUz: 'Tokico Toyota Camry XV40 uchun asosiy tormoz silindr', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M2, price: '880000', weight: '2.000' },
+    { slug: 'brake-caliper-front-left-akebono', sku: 'AKEBONO-CALIP-L', nameRu: 'Суппорт тормозной передний левый Akebono', nameUz: 'Akebono old chap tormoz supporti', categoryId: catBySlug['brake-system']!, brandId: B('Brembo'), merchantId: M1, price: '1450000', compareAtPrice: '1680000', weight: '5.500', isOnSale: true },
+    { slug: 'brake-drum-rear-lacetti', sku: 'DRUM-LACETTI', nameRu: 'Тормозной барабан задний для Chevrolet Lacetti', nameUz: 'Chevrolet Lacetti orqa tormoz barabani', categoryId: catBySlug['brake-system']!, brandId: B('Chevrolet'), merchantId: M2, price: '225000', weight: '5.000' },
+    { slug: 'brake-fluid-reservoir-universal', sku: 'BFR-UNI', nameRu: 'Бачок тормозной жидкости универсальный 250мл', nameUz: 'Universal tormoz suyuqligi idishi 250ml', categoryId: catBySlug['brake-system']!, brandId: B('Bosch'), merchantId: M1, price: '65000', weight: '0.200' },
+    { slug: 'parking-brake-cable-camry', sku: 'PB-CABLE-CAMRY', nameRu: 'Трос ручного тормоза Toyota Camry XV40, задний правый', nameUz: 'Toyota Camry XV40 qo\'l tormoz tepkichi, orqa o\'ng', categoryId: catBySlug['brake-system']!, brandId: B('Toyota'), merchantId: M2, price: '145000', weight: '0.600' },
+
+    // =========================================================================
+    // ENGINE-PARTS — Двигатель (10 шт)
+    // =========================================================================
+    { slug: 'timing-belt-gates-5419xs', sku: 'GATES-5419XS', nameRu: 'Ремень ГРМ Gates 5419XS Powergrip', nameUz: 'Gates 5419XS Powergrip taqsimlash kamari', categoryId: catBySlug['engine-parts']!, brandId: B('Bosch'), merchantId: M1, oemNumber: '5419XS', price: '185000', weight: '0.300', isFeatured: true },
+    { slug: 'timing-belt-tensioner-dayco-atb2147', sku: 'DAYCO-ATB2147', nameRu: 'Натяжитель ремня ГРМ Dayco ATB2147', nameUz: 'Dayco ATB2147 taqsimlash kamar tortgichi', categoryId: catBySlug['engine-parts']!, brandId: B('Bosch'), merchantId: M2, oemNumber: 'ATB2147', price: '245000', weight: '0.400' },
+    { slug: 'water-pump-aisin-wpt-118', sku: 'AISIN-WPT118', nameRu: 'Помпа Aisin WPT-118 для Toyota Camry 2.4', nameUz: 'Toyota Camry 2.4 uchun Aisin WPT-118 nasos', categoryId: catBySlug['engine-parts']!, brandId: B('Toyota'), merchantId: M1, oemNumber: 'WPT-118', price: '385000', compareAtPrice: '450000', weight: '1.200', isOnSale: true },
+    { slug: 'valve-cover-gasket-elring-219330', sku: 'ELRING-219330', nameRu: 'Прокладка клапанной крышки Elring 219.330', nameUz: 'Elring 219.330 klapan qopqog\'i zichlamasi', categoryId: catBySlug['engine-parts']!, brandId: B('Brembo'), merchantId: M2, oemNumber: '219.330', price: '95000', weight: '0.150' },
+    { slug: 'crankshaft-seal-front-victor', sku: 'VR-SEAL-FRONT', nameRu: 'Сальник коленвала передний Victor Reinz 81-26706-00', nameUz: 'Victor Reinz 81-26706-00 old tirsak vali zichlagichi', categoryId: catBySlug['engine-parts']!, brandId: B('Brembo'), merchantId: M1, oemNumber: '81-26706-00', price: '45000', weight: '0.050' },
+    { slug: 'piston-rings-set-mahle-08240n2', sku: 'MAHLE-08240N2', nameRu: 'Кольца поршневые Mahle 08240N2, 88.5mm STD', nameUz: 'Mahle 08240N2 piston halqalari, 88.5mm STD', categoryId: catBySlug['engine-parts']!, brandId: B('Mahle'), merchantId: M2, oemNumber: '08240N2', price: '485000', weight: '0.300' },
+    { slug: 'head-bolts-reinz-141-49034-01', sku: 'REINZ-14149034', nameRu: 'Болты ГБЦ Reinz 14-149034-01, комплект 10 шт.', nameUz: 'Reinz 14-149034-01 GBC boltlari, 10 dona', categoryId: catBySlug['engine-parts']!, brandId: B('Brembo'), merchantId: M1, oemNumber: '14-149034-01', price: '185000', weight: '0.500' },
+    { slug: 'engine-mount-front-camry', sku: 'EM-FRONT-CAMRY', nameRu: 'Опора двигателя передняя Toyota Camry XV40 2.4', nameUz: 'Toyota Camry XV40 2.4 old dvigatel tayanchi', categoryId: catBySlug['engine-parts']!, brandId: B('Toyota'), merchantId: M2, price: '385000', weight: '2.000' },
+    { slug: 'spark-coil-denso-673-1306', sku: 'DENSO-673-1306', nameRu: 'Катушка зажигания Denso 673-1306 для Toyota', nameUz: 'Toyota uchun Denso 673-1306 uchqun g\'altagi', categoryId: catBySlug['engine-parts']!, brandId: B('Denso'), merchantId: M1, oemNumber: '673-1306', price: '420000', isFeatured: true },
+    { slug: 'thermostat-mahle-th35-87', sku: 'MAHLE-TH35-87', nameRu: 'Термостат Mahle TH 35 87, 87°C', nameUz: 'Mahle TH 35 87 termostat, 87°C', categoryId: catBySlug['engine-parts']!, brandId: B('Mahle'), merchantId: M2, oemNumber: 'TH35 87', price: '125000', weight: '0.200' },
+
+    // =========================================================================
+    // ELECTRICAL — Электрика, аккумуляторы (10 шт)
+    // =========================================================================
+    { slug: 'battery-varta-blue-60ah', sku: 'VARTA-BLUE-60', nameRu: 'Аккумулятор Varta Blue Dynamic D24 60Ah 540A', nameUz: 'Varta Blue Dynamic D24 60Ah 540A akkumulyator', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M1, price: '850000', compareAtPrice: '980000', weight: '15.000', isOnSale: true, isFeatured: true },
+    { slug: 'battery-bosch-s5-75ah', sku: 'BOSCH-S5-75', nameRu: 'Аккумулятор Bosch S5 008 77Ah 780A', nameUz: 'Bosch S5 008 77Ah 780A akkumulyator', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M2, price: '1180000', weight: '20.500' },
+    { slug: 'starter-bosch-camry', sku: 'BOSCH-STARTER-CAMRY', nameRu: 'Стартер Bosch для Toyota Camry XV40 2.4', nameUz: 'Toyota Camry XV40 2.4 uchun Bosch starteri', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M1, price: '1850000', weight: '4.500' },
+    { slug: 'alternator-denso-camry', sku: 'DENSO-ALT-CAMRY', nameRu: 'Генератор Denso 100A для Toyota Camry XV40', nameUz: 'Toyota Camry XV40 uchun Denso 100A generator', categoryId: catBySlug['electrical']!, brandId: B('Denso'), merchantId: M2, price: '2250000', compareAtPrice: '2680000', weight: '6.000', isOnSale: true },
+    { slug: 'starter-relay-12v', sku: 'STARTER-REL-12V', nameRu: 'Реле стартера 12V Behr Hella 4MD003520-08', nameUz: 'Behr Hella 4MD003520-08 12V starter relesi', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M2, oemNumber: '4MD003520-08', price: '85000', weight: '0.150', isFeatured: true },
+    { slug: 'spark-plug-wires-ngk-rc-te77', sku: 'NGK-RC-TE77', nameRu: 'Провода зажигания NGK RC-TE77 для Toyota', nameUz: 'Toyota uchun NGK RC-TE77 uchqun simlari', categoryId: catBySlug['electrical']!, brandId: B('NGK'), merchantId: M1, oemNumber: 'RC-TE77', price: '195000', weight: '0.400' },
+    { slug: 'oxygen-sensor-bosch-15814', sku: 'BOSCH-LSF4', nameRu: 'Датчик кислорода (лямбда-зонд) Bosch 0258006537', nameUz: 'Bosch 0258006537 kislorod datchigi (lambda zond)', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M2, oemNumber: '0258006537', price: '485000', weight: '0.250' },
+    { slug: 'crankshaft-position-sensor-ngk', sku: 'NGK-CKP-CAMRY', nameRu: 'Датчик коленвала NGK для Toyota Camry XV40', nameUz: 'Toyota Camry XV40 uchun NGK tirsak vali datchigi', categoryId: catBySlug['electrical']!, brandId: B('NGK'), merchantId: M1, price: '285000', weight: '0.150' },
+    { slug: 'lamp-w5w-osram-led', sku: 'OSRAM-W5W-LED', nameRu: 'Лампа габаритная W5W Osram LED 6000K, 2 шт.', nameUz: 'Osram W5W LED 6000K gabarit lampasi, 2 dona', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M2, price: '65000', weight: '0.050' },
+    { slug: 'fuse-set-mini-universal', sku: 'FUSES-MINI-100', nameRu: 'Набор предохранителей mini 5-30A, 100 шт.', nameUz: 'mini 5-30A saqlagichlar to\'plami, 100 dona', categoryId: catBySlug['electrical']!, brandId: B('Bosch'), merchantId: M1, price: '45000', weight: '0.200' },
+
+    // =========================================================================
+    // SUSPENSION — Подвеска и рулевое (10 шт)
+    // =========================================================================
+    { slug: 'shock-absorber-front-kyb-camry', sku: 'KYB-EXCEL-G-CAMRY-F', nameRu: 'Стойка передняя KYB Excel-G для Toyota Camry XV40', nameUz: 'Toyota Camry XV40 uchun KYB Excel-G old stoyka', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M1, oemNumber: '339024', price: '785000', isFeatured: true },
+    { slug: 'shock-absorber-rear-monroe-cobalt', sku: 'MONROE-COBALT-R', nameRu: 'Амортизатор задний Monroe для Chevrolet Cobalt', nameUz: 'Chevrolet Cobalt uchun Monroe orqa amortizator', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M2, price: '385000', compareAtPrice: '450000', weight: '3.000', isOnSale: true },
+    { slug: 'spring-front-lesjofors-lacetti', sku: 'LESJ-FRONT-LACETTI', nameRu: 'Пружина передняя Lesjofors для Chevrolet Lacetti', nameUz: 'Chevrolet Lacetti uchun Lesjofors old prujina', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M1, price: '185000', weight: '2.500' },
+    { slug: 'stabilizer-bush-lemforder-camry', sku: 'LEM-STAB-CAMRY', nameRu: 'Втулка стабилизатора Lemforder для Toyota Camry, 2 шт.', nameUz: 'Toyota Camry uchun Lemforder stabilizator vtulkasi, 2 dona', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M2, price: '65000', weight: '0.200' },
+    { slug: 'control-arm-bushing-camry', sku: 'BUSH-LCA-CAMRY', nameRu: 'Сайлентблок рычага передний Toyota Camry XV40', nameUz: 'Toyota Camry XV40 old rul vtulkasi (saylentblok)', categoryId: catBySlug['suspension']!, brandId: B('Toyota'), merchantId: M1, price: '85000', weight: '0.300' },
+    { slug: 'ball-joint-trw-camry', sku: 'TRW-BALL-CAMRY', nameRu: 'Шаровая опора TRW JBJ7572 для Toyota Camry', nameUz: 'Toyota Camry uchun TRW JBJ7572 sharli tayanch', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M2, oemNumber: 'JBJ7572', price: '145000', weight: '0.500' },
+    { slug: 'tie-rod-end-moog-camry', sku: 'MOOG-TR-CAMRY', nameRu: 'Наконечник рулевой Moog для Toyota Camry, правый', nameUz: 'Toyota Camry uchun Moog rul uchi, o\'ng', categoryId: catBySlug['suspension']!, brandId: B('Brembo'), merchantId: M1, price: '125000', compareAtPrice: '155000', weight: '0.400', isOnSale: true },
+    { slug: 'steering-rack-camry-xv40', sku: 'RACK-CAMRY-XV40', nameRu: 'Рулевая рейка Toyota Camry XV40 в сборе', nameUz: 'Toyota Camry XV40 to\'liq rul reykasi', categoryId: catBySlug['suspension']!, brandId: B('Toyota'), merchantId: M2, price: '4250000', weight: '15.000' },
+    { slug: 'wheel-bearing-hub-front-camry', sku: 'BEARING-HUB-CAMRY-F', nameRu: 'Ступичный подшипник передний Toyota Camry XV40', nameUz: 'Toyota Camry XV40 old g\'ildirak podshipnigi', categoryId: catBySlug['suspension']!, brandId: B('Toyota'), merchantId: M1, price: '385000', weight: '1.500', isFeatured: true },
+    { slug: 'cv-joint-outer-cobalt', sku: 'CV-OUT-COBALT', nameRu: 'ШРУС наружный Chevrolet Cobalt 24x30', nameUz: 'Chevrolet Cobalt tashqi SHRUS 24x30', categoryId: catBySlug['suspension']!, brandId: B('Chevrolet'), merchantId: M2, price: '285000', weight: '1.800' },
+
+    // =========================================================================
+    // ACCESSORIES — Аксессуары (10 шт)
+    // =========================================================================
+    { slug: 'dashcam-70mai-pro-plus', sku: '70MAI-PRO-PLUS', nameRu: 'Видеорегистратор 70mai Dash Cam Pro Plus 2.7K', nameUz: '70mai Dash Cam Pro Plus 2.7K videoregistrator', categoryId: catBySlug['accessories']!, merchantId: M1, price: '1250000', compareAtPrice: '1450000', weight: '0.250', isOnSale: true, isFeatured: true },
+    { slug: 'parking-sensor-4', sku: 'PARKTRON-4', nameRu: 'Парктроник 4 датчика с дисплеем', nameUz: '4 datchikli displayli parktronik', categoryId: catBySlug['accessories']!, merchantId: M2, price: '385000', weight: '0.500', isNew: true },
+    { slug: 'phone-holder-suction', sku: 'HOLDER-SUCT', nameRu: 'Держатель телефона на присоске универсальный', nameUz: 'Universal so\'rg\'ichli telefon ushlagichi', categoryId: catBySlug['accessories']!, merchantId: M1, price: '55000', weight: '0.150' },
+    { slug: 'usb-charger-12v-3port', sku: 'USB-12V-3', nameRu: 'Автомобильное зарядное USB 12V→5V 3 порта QC3.0', nameUz: 'USB 12V→5V 3 portli QC3.0 avto zaryadlovchi', categoryId: catBySlug['accessories']!, brandId: B('Bosch'), merchantId: M2, price: '75000', weight: '0.100' },
+    { slug: 'fm-transmitter-bt5-0', sku: 'FM-BT5', nameRu: 'FM-трансмиттер Bluetooth 5.0 с USB зарядкой', nameUz: 'USB zaryadli Bluetooth 5.0 FM transmitter', categoryId: catBySlug['accessories']!, merchantId: M1, price: '95000', weight: '0.150' },
+    { slug: 'vacuum-cleaner-12v-120w', sku: 'VACUUM-12V-120', nameRu: 'Автомобильный пылесос 12V 120W с HEPA фильтром', nameUz: 'HEPA filtrli 12V 120W avto changyutgich', categoryId: catBySlug['accessories']!, merchantId: M2, price: '385000', compareAtPrice: '480000', weight: '1.200', isOnSale: true },
+    { slug: 'compressor-12v-berkut', sku: 'BERKUT-R15', nameRu: 'Компрессор автомобильный Berkut R15, 35 л/мин', nameUz: 'Berkut R15 avto kompressor, 35 l/min', categoryId: catBySlug['accessories']!, merchantId: M1, price: '485000', weight: '2.500', isFeatured: true },
+    { slug: 'tow-strap-5t', sku: 'TOW-STRAP-5T', nameRu: 'Буксировочный трос 5т, 4м с крюками', nameUz: 'Ilgakli buksir tepkichi 5t, 4m', categoryId: catBySlug['accessories']!, merchantId: M2, price: '85000', weight: '1.500' },
+    { slug: 'warning-triangle', sku: 'WARN-TRIANGLE', nameRu: 'Знак аварийной остановки треугольный ГОСТ', nameUz: 'Avariya to\'xtash uchburchak belgisi GOST', categoryId: catBySlug['accessories']!, merchantId: M1, price: '35000', weight: '0.500' },
+    { slug: 'first-aid-kit-auto', sku: 'FAK-AUTO', nameRu: 'Аптечка автомобильная (обновлённый состав)', nameUz: 'Avto dorixonasi (yangilangan tarkib)', categoryId: catBySlug['accessories']!, merchantId: M2, price: '95000', weight: '0.600', isFeatured: true },
   ];
 
-  // Дополним до 50 простыми вариациями (для пагинации в каталоге)
-  while (products.length < 50) {
-    const i = products.length;
-    products.push({
-      slug: `demo-product-${i}`,
-      sku: `DEMO-${String(i).padStart(4, '0')}`,
-      nameRu: `Демо-товар №${i}`,
-      nameUz: `Demo mahsulot #${i}`,
-      categoryId: i % 2 === 0 ? categoryConsum.id : categoryBrake.id,
-      brandId: i % 2 === 0 ? bosch.id : mann.id,
-      merchantId: i % 2 === 0 ? ID.merchant.type1 : ID.merchant.type2,
-      price: String(50000 + i * 5000),
-      weight: '0.500',
-    });
-  }
+  // Удаляем устаревшие DEMO-заглушки от предыдущей версии seed.
+  // Каскад: связанные ProductCompatibility/Image/InventoryBalance подчищаются автоматически.
+  const removed = await prisma.product.deleteMany({
+    where: { sku: { startsWith: 'DEMO-' } },
+  });
+  if (removed.count > 0) console.log(`  • removed ${removed.count} old DEMO products`);
 
   for (const p of products) {
     const data = {
