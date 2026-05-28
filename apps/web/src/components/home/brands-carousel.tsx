@@ -9,7 +9,7 @@ export function BrandsCarousel({ brands }: { brands: Brand[] }) {
       {brands.map((b) => (
         <Link
           key={b.id}
-          href={`/c?brand=${b.slug}`}
+          href={`/brands/${b.slug}`}
           className="flex shrink-0 snap-start flex-col items-center gap-1.5"
         >
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-card text-base font-bold uppercase tracking-wider text-foreground shadow-sm">
