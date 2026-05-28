@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -23,6 +23,14 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<Card><CardContent className="p-6 text-sm text-muted-foreground">Загрузка…</CardContent></Card>}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const setTokens = useAuthStore((s) => s.setTokens);

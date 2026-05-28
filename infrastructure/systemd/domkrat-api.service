@@ -1,0 +1,30 @@
+[Unit]
+Description=Domkrat API (NestJS)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=domkrat
+Group=domkrat
+WorkingDirectory=/opt/domkrat/apps/api
+EnvironmentFile=/etc/domkrat/api.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=domkrat-api
+
+# Безопасность
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+# Лимиты
+LimitNOFILE=65535
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

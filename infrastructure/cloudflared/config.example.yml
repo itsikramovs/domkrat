@@ -1,0 +1,54 @@
+# Cloudflare Tunnel — публикация локального сервера в интернет через Cloudflare,
+# без необходимости настраивать DNS A-записи, SSL-сертификаты и пробрасывать порты.
+#
+# Установка (Ubuntu):
+#   curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+#   sudo dpkg -i cloudflared.deb
+#
+# Создание туннеля:
+#   cloudflared tunnel login         # авторизация в Cloudflare account
+#   cloudflared tunnel create domkrat
+#   # сохранит credentials в ~/.cloudflared/<UUID>.json
+#
+# DNS routes:
+#   cloudflared tunnel route dns domkrat domkrat.uz
+#   cloudflared tunnel route dns domkrat api.domkrat.uz
+#   cloudflared tunnel route dns domkrat merchant.domkrat.uz
+#   cloudflared tunnel route dns domkrat admin.domkrat.uz
+#   cloudflared tunnel route dns domkrat cdn.domkrat.uz
+#
+# Скопировать этот файл и заменить tunnel UUID + credentials path:
+#   sudo cp infrastructure/cloudflared/config.example.yml /etc/cloudflared/config.yml
+#
+# Запуск как сервис:
+#   sudo cloudflared service install
+#   sudo systemctl enable --now cloudflared
+
+tunnel: CHANGE_ME_TUNNEL_UUID
+credentials-file: /root/.cloudflared/CHANGE_ME_TUNNEL_UUID.json
+
+ingress:
+  # Customer web
+  - hostname: domkrat.uz
+    service: http://localhost:3000
+  - hostname: www.domkrat.uz
+    service: http://localhost:3000
+
+  # API
+  - hostname: api.domkrat.uz
+    service: http://localhost:3001
+
+  # Merchant cabinet
+  - hostname: merchant.domkrat.uz
+    service: http://localhost:3002
+
+  # Admin panel (доступ только по списку IP — настраивается в Cloudflare Access)
+  - hostname: admin.domkrat.uz
+    service: http://localhost:3003
+
+  # MinIO public (картинки товаров)
+  - hostname: cdn.domkrat.uz
+    service: http://localhost:9000
+
+  # Catch-all
+  - service: http_status:404

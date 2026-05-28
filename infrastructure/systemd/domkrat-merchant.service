@@ -1,0 +1,27 @@
+[Unit]
+Description=Domkrat Merchant cabinet
+After=network.target domkrat-api.service
+
+[Service]
+Type=simple
+User=domkrat
+Group=domkrat
+WorkingDirectory=/opt/domkrat/apps/merchant
+EnvironmentFile=/etc/domkrat/merchant.env
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3002
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=domkrat-merchant
+
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+LimitNOFILE=65535
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
