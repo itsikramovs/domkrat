@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   FinancialTransactionType,
   Prisma,
@@ -13,10 +14,14 @@ import {
 import Decimal from 'decimal.js';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { WithdrawalEvents, type WithdrawalEventPayload } from '../../notifications/events';
 
 @Injectable()
 export class AdminFinanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async dashboard() {
     const [
@@ -165,13 +170,22 @@ export class AdminFinanceService {
         },
       });
 
-      return tx.withdrawalRequest.update({
+      const updated = await tx.withdrawalRequest.update({
         where: { id },
         data: {
           status: WithdrawalStatus.COMPLETED,
           externalTransactionId,
         },
       });
+      return updated;
+    }).then((result) => {
+      this.events.emit(WithdrawalEvents.Completed, {
+        withdrawalId: result.id,
+        requestNumber: result.requestNumber,
+        merchantId: result.merchantId,
+        amount: result.amount.toString(),
+      } satisfies WithdrawalEventPayload);
+      return result;
     });
   }
 }

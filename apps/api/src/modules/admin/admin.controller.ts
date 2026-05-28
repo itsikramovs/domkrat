@@ -23,6 +23,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/types';
 
+import { HoldReleaseService } from '../finance/hold-release.service';
+
 import { AdminFinanceService } from './services/admin-finance.service';
 import { AdminMerchantsService } from './services/admin-merchants.service';
 import { AdminOrdersService } from './services/admin-orders.service';
@@ -37,6 +39,7 @@ export class AdminController {
     private readonly merchants: AdminMerchantsService,
     private readonly orders: AdminOrdersService,
     private readonly finance: AdminFinanceService,
+    private readonly holdRelease: HoldReleaseService,
   ) {}
 
   // ============================================================ Users
@@ -240,5 +243,14 @@ export class AdminController {
   ) {
     if (!body.externalTransactionId) throw new BadRequestException('externalTransactionId required');
     return this.finance.completeWithdrawal(id, user.id, body.externalTransactionId);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @Post('finance/hold-release/run')
+  @ApiOperation({
+    summary: 'Запустить cron hold-release вручную (pending → available после холда)',
+  })
+  runHoldRelease() {
+    return this.holdRelease.releaseEligible();
   }
 }

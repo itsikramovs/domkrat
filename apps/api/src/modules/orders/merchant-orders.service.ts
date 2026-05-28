@@ -5,9 +5,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderItemStatus, OrderStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { SubOrderEvents, type SubOrderEventPayload } from '../notifications/events';
 
 const SUB_ORDER_INCLUDE = {
   order: {
@@ -40,7 +42,10 @@ const SUB_ORDER_INCLUDE = {
 export class MerchantOrdersService {
   private readonly logger = new Logger(MerchantOrdersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   async list(
     merchantId: string,
@@ -218,6 +223,16 @@ export class MerchantOrdersService {
       }
 
       return updated;
+    }).then((result) => {
+      if (cfg.to === OrderStatus.SHIPPED) {
+        this.events.emit(SubOrderEvents.Shipped, {
+          subOrderId,
+          subOrderNumber: result.subOrderNumber,
+          orderId: result.orderId,
+          merchantId: result.merchantId,
+        } satisfies SubOrderEventPayload);
+      }
+      return result;
     });
   }
 }

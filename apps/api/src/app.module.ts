@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
@@ -19,6 +21,8 @@ import { UsersModule } from './modules/users/users.module';
       isGlobal: true,
       cache: true,
     }),
+    EventEmitterModule.forRoot({ ignoreErrors: false }),
+    ScheduleModule.forRoot(),
     LoggerModule.forRoot({
       pinoHttp: {
         transport:

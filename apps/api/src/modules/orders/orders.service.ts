@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   DeliveryMethodType,
   FulfillmentType,
@@ -21,6 +22,7 @@ import Decimal from 'decimal.js';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PricingService } from '../cart/pricing.service';
+import { OrderEvents, type OrderEventPayload } from '../notifications/events';
 
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderNumberingService } from './order-numbering.service';
@@ -37,6 +39,7 @@ export class OrdersService {
     private readonly pricing: PricingService,
     private readonly numbering: OrderNumberingService,
     private readonly payments: PaymentsService,
+    private readonly events: EventEmitter2,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -264,6 +267,11 @@ export class OrdersService {
     });
 
     this.logger.log(`Order ${orderNumber} created for user=${userId}`);
+    this.events.emit(OrderEvents.Created, {
+      orderId: order.id,
+      orderNumber,
+      userId,
+    } satisfies OrderEventPayload);
     return this.getById(userId, order.id);
   }
 
@@ -282,6 +290,11 @@ export class OrdersService {
 
     if (result.immediatePaid) {
       await this.markPaid(order.id);
+      this.events.emit(OrderEvents.Paid, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        userId: order.userId,
+      } satisfies OrderEventPayload);
     }
 
     return {
@@ -490,6 +503,13 @@ export class OrdersService {
 
       this.logger.log(`Order ${order.orderNumber} COMPLETED; credited ${order.subOrders.length} sub-orders to pending balances`);
       return updated;
+    }).then((result) => {
+      this.events.emit(OrderEvents.Completed, {
+        orderId,
+        orderNumber: order.orderNumber,
+        userId,
+      } satisfies OrderEventPayload);
+      return result;
     });
   }
 
