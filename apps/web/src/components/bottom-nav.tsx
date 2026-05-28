@@ -6,29 +6,32 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useCart } from '@/lib/api/cart';
+import { useUnreadCount } from '@/lib/api/notifications';
 import { cn } from '@/lib/utils';
 
 type NavItem = {
   href: string;
   label: string;
   icon: typeof Home;
-  isCart?: boolean;
+  badge?: 'cart' | 'profile';
 };
 
 const items: readonly NavItem[] = [
   { href: '/', label: 'Главная', icon: Home },
   { href: '/catalog', label: 'Каталог', icon: Grid3x3 },
   { href: '/stores', label: 'Магазины', icon: Store },
-  { href: '/cart', label: 'Корзина', icon: ShoppingBag, isCart: true },
-  { href: '/account', label: 'Профиль', icon: User },
+  { href: '/cart', label: 'Корзина', icon: ShoppingBag, badge: 'cart' },
+  { href: '/account', label: 'Профиль', icon: User, badge: 'profile' },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const cart = useCart();
+  const unread = useUnreadCount();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const itemsCount = cart.data?.itemsCount ?? 0;
+  const cartCount = cart.data?.itemsCount ?? 0;
+  const unreadCount = unread.data?.count ?? 0;
 
   return (
     <nav
@@ -37,8 +40,9 @@ export function BottomNav() {
       aria-label="Главное меню"
     >
       <ul className="grid h-16 grid-cols-5">
-        {items.map(({ href, label, icon: Icon, isCart }) => {
+        {items.map(({ href, label, icon: Icon, badge }) => {
           const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+          const count = badge === 'cart' ? cartCount : badge === 'profile' ? unreadCount : 0;
           return (
             <li key={href}>
               <Link
@@ -50,9 +54,16 @@ export function BottomNav() {
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
                 <span>{label}</span>
-                {isCart && mounted && itemsCount > 0 ? (
-                  <span className="absolute right-[calc(50%-22px)] top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                    {itemsCount > 99 ? '99+' : itemsCount}
+                {badge && mounted && count > 0 ? (
+                  <span
+                    className={cn(
+                      'absolute right-[calc(50%-22px)] top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold',
+                      badge === 'profile'
+                        ? 'bg-sale text-sale-foreground'
+                        : 'bg-primary text-primary-foreground',
+                    )}
+                  >
+                    {count > 99 ? '99+' : count}
                   </span>
                 ) : null}
               </Link>
