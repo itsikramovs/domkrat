@@ -3,6 +3,7 @@
 import { Grid3x3, Home, Store, ShoppingBag, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 
 import { useCart } from '@/lib/api/cart';
@@ -11,21 +12,22 @@ import { cn } from '@/lib/utils';
 
 type NavItem = {
   href: string;
-  label: string;
+  labelKey: 'home' | 'catalog' | 'stores' | 'cart' | 'account';
   icon: typeof Home;
   badge?: 'cart' | 'profile';
 };
 
 const items: readonly NavItem[] = [
-  { href: '/', label: 'Главная', icon: Home },
-  { href: '/catalog', label: 'Каталог', icon: Grid3x3 },
-  { href: '/stores', label: 'Магазины', icon: Store },
-  { href: '/cart', label: 'Корзина', icon: ShoppingBag, badge: 'cart' },
-  { href: '/account', label: 'Профиль', icon: User, badge: 'profile' },
+  { href: '/', labelKey: 'home', icon: Home },
+  { href: '/catalog', labelKey: 'catalog', icon: Grid3x3 },
+  { href: '/stores', labelKey: 'stores', icon: Store },
+  { href: '/cart', labelKey: 'cart', icon: ShoppingBag, badge: 'cart' },
+  { href: '/account', labelKey: 'account', icon: User, badge: 'profile' },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const t = useTranslations('nav');
   const cart = useCart();
   const unread = useUnreadCount();
   const [mounted, setMounted] = useState(false);
@@ -40,7 +42,7 @@ export function BottomNav() {
       aria-label="Главное меню"
     >
       <ul className="grid h-16 grid-cols-5">
-        {items.map(({ href, label, icon: Icon, badge }) => {
+        {items.map(({ href, labelKey, icon: Icon, badge }) => {
           const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
           const count = badge === 'cart' ? cartCount : badge === 'profile' ? unreadCount : 0;
           return (
@@ -53,7 +55,7 @@ export function BottomNav() {
                 )}
               >
                 <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
-                <span>{label}</span>
+                <span>{t(labelKey)}</span>
                 {badge && mounted && count > 0 ? (
                   <span
                     className={cn(

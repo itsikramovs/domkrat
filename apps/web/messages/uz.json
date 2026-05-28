@@ -1,0 +1,61 @@
+{
+  "nav": {
+    "home": "Bosh sahifa",
+    "catalog": "Katalog",
+    "search": "Qidiruv",
+    "cart": "Savat",
+    "account": "Profil",
+    "brands": "Brendlar",
+    "stores": "Do‘konlar",
+    "favorites": "Sevimlilar"
+  },
+  "account": {
+    "title": "Profil",
+    "orders": "Buyurtmalarim",
+    "garage": "Mening garajim",
+    "addresses": "Yetkazib berish manzillari",
+    "notifications": "Bildirishnomalar",
+    "favorites": "Sevimlilar",
+    "settings": "Sozlamalar",
+    "logout": "Chiqish",
+    "login": "Kirish"
+  },
+  "home": {
+    "categories": "Kategoriyalar",
+    "popular": "Sotuv hitlari",
+    "newArrivals": "Yangiliklar",
+    "brands": "Brendlar",
+    "viewAll": "Hammasi",
+    "compatibleWithYourCar": "Avtomobilingizga mos"
+  },
+  "common": {
+    "search": "Katalog bo‘yicha qidiruv",
+    "addToCart": "Savatga",
+    "buyNow": "Hozir sotib olish",
+    "inCart": "Savatda",
+    "outOfStock": "Mavjud emas",
+    "loading": "Yuklanmoqda...",
+    "empty": "Bo‘sh",
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "delete": "O‘chirish",
+    "edit": "Tahrirlash",
+    "back": "Orqaga"
+  },
+  "footer": {
+    "tagline": "O‘zbekiston uchun avto tovarlar va ehtiyot qismlari marketpleysi.",
+    "catalog": "Katalog",
+    "info": "Ma’lumot",
+    "contacts": "Aloqa",
+    "terms": "Foydalanish shartlari",
+    "privacy": "Maxfiylik",
+    "offer": "Ommaviy oferta",
+    "returnsPolicy": "Qaytarish va almashtirish",
+    "rights": "Barcha huquqlar himoyalangan"
+  },
+  "lang": {
+    "label": "Til",
+    "ru": "Русский",
+    "uz": "O‘zbekcha"
+  }
+}

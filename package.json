@@ -26,10 +26,21 @@
     "db:migrate": "pnpm --filter @domkrat/api prisma migrate dev",
     "db:generate": "pnpm --filter @domkrat/api prisma generate",
     "db:studio": "pnpm --filter @domkrat/api prisma studio --port 5555 --browser none",
-    "db:seed": "pnpm --filter @domkrat/api exec prisma db seed"
+    "db:seed": "pnpm --filter @domkrat/api exec prisma db seed",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{js,jsx,json,md}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "prettier": "^3.3.0",
     "turbo": "^2.1.0",
     "typescript": "^5.5.0"

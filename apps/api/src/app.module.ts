@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
@@ -25,6 +26,8 @@ import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
+    // Если SENTRY_DSN не задан — модуль активен, но событий никуда не отправляет (см. src/instrument.ts).
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,

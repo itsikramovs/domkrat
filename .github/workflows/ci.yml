@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck:
+    name: Lint + Type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @domkrat/api prisma generate
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Lint
+        run: pnpm lint
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @domkrat/api prisma generate
+      - run: pnpm test
+
+  e2e-tests:
+    name: E2E tests (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: domkrat
+          POSTGRES_PASSWORD: domkrat_dev_pass
+          POSTGRES_DB: domkrat_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U domkrat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://domkrat:domkrat_dev_pass@localhost:5432/domkrat_test?schema=public
+      JWT_SECRET: ci_test_secret_at_least_32_chars_long_random
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm --filter @domkrat/api prisma migrate deploy
+
+      - name: Seed dev data
+        run: pnpm --filter @domkrat/api exec prisma db seed
+
+      - name: Run E2E
+        run: pnpm test:e2e
+
+  build:
+    name: Build all apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint-typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @domkrat/api prisma generate
+      - run: pnpm build

@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# Auto-prettier on staged files. Тяжёлые проверки (type-check, тесты) — в CI.
+pnpm exec lint-staged

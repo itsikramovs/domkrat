@@ -1,3 +1,6 @@
+// Sentry должен импортироваться первым — до создания любого модуля приложения.
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -41,7 +44,11 @@ async function bootstrap() {
     if (corsOrigins.length === 0) {
       throw new Error('CORS_ORIGINS must be explicitly set in production (no wildcard)');
     }
-    if (corsOrigins.some((o) => o.includes('localhost') || o.includes('127.0.0.1') || o.includes('192.168'))) {
+    if (
+      corsOrigins.some(
+        (o) => o.includes('localhost') || o.includes('127.0.0.1') || o.includes('192.168'),
+      )
+    ) {
       throw new Error(`CORS_ORIGINS contains a dev host in production: ${corsOrigins.join(', ')}`);
     }
   }

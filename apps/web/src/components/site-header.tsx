@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { LangSwitcher } from '@/components/lang-switcher';
 import { SearchAutocomplete } from '@/components/search-autocomplete';
 import { useCart } from '@/lib/api/cart';
 import { useAuthStore } from '@/lib/auth-store';
@@ -32,7 +33,9 @@ export function SiteHeader() {
       {/* Desktop row */}
       <div className="container hidden h-16 items-center gap-4 md:flex">
         <Link href="/" className="flex items-center gap-2">
-          <span className="rounded-md bg-primary px-2 py-1 text-sm font-bold text-primary-foreground">DK</span>
+          <span className="rounded-md bg-primary px-2 py-1 text-sm font-bold text-primary-foreground">
+            DK
+          </span>
           <span className="text-lg font-bold">Домкрат</span>
         </Link>
 
@@ -48,6 +51,7 @@ export function SiteHeader() {
         </div>
 
         <nav className="ml-auto flex items-center gap-1">
+          <LangSwitcher />
           <Button asChild variant="ghost" size="sm" className="relative">
             <Link href="/cart" aria-label="Корзина">
               <ShoppingCart className="h-4 w-4" />
@@ -65,7 +69,9 @@ export function SiteHeader() {
               <Button asChild variant="ghost" size="sm">
                 <Link href="/account">
                   <User className="h-4 w-4" />
-                  <span className="hidden sm:inline">{user?.firstName ?? user?.email ?? 'Аккаунт'}</span>
+                  <span className="hidden sm:inline">
+                    {user?.firstName ?? user?.email ?? 'Аккаунт'}
+                  </span>
                 </Link>
               </Button>
               <Button
@@ -99,6 +105,7 @@ export function SiteHeader() {
               position="mobile"
             />
           </div>
+          <LangSwitcher />
           <Link
             href="/account/favorites"
             aria-label="Избранное"

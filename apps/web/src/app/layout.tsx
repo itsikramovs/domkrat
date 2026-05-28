@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from 'next';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import { Toaster } from 'sonner';
 
 import { BottomNav } from '@/components/bottom-nav';
@@ -19,20 +21,25 @@ export const viewport: Viewport = {
   themeColor: '#1d6cf5',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="ru">
+    <html lang={locale}>
       <body className="flex min-h-screen flex-col">
-        <QueryProvider>
-          <SiteHeader />
-          {/* pb-20 на мобильном резервирует место под BottomNav */}
-          <main className="flex-1 pb-20 md:pb-0">{children}</main>
-          <div className="hidden md:block">
-            <SiteFooter />
-          </div>
-          <BottomNav />
-        </QueryProvider>
-        <Toaster richColors position="top-center" />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <QueryProvider>
+            <SiteHeader />
+            {/* pb-20 на мобильном резервирует место под BottomNav */}
+            <main className="flex-1 pb-20 md:pb-0">{children}</main>
+            <div className="hidden md:block">
+              <SiteFooter />
+            </div>
+            <BottomNav />
+          </QueryProvider>
+          <Toaster richColors position="top-center" />
+        </NextIntlClientProvider>
       </body>
     </html>
   );
