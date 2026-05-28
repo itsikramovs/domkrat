@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export enum ProductSort {
   NEW = 'new',
@@ -60,4 +60,32 @@ export class ListProductsDto {
   @IsOptional()
   @IsEnum(ProductSort)
   sort?: ProductSort = ProductSort.POPULAR;
+
+  @ApiPropertyOptional({ description: 'Slug категории (альтернатива categoryId)' })
+  @IsOptional()
+  @IsString()
+  categorySlug?: string;
+
+  @ApiPropertyOptional({ description: 'Slug бренда (альтернатива brandId)' })
+  @IsOptional()
+  @IsString()
+  brandSlug?: string;
+
+  @ApiPropertyOptional({ description: 'Только избранные (главная)' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  featured?: boolean;
+
+  @ApiPropertyOptional({ description: 'Только со скидкой' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  onSale?: boolean;
+
+  @ApiPropertyOptional({ description: 'Только новинки' })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  isNew?: boolean;
 }

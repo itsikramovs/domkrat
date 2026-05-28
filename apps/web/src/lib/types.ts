@@ -53,11 +53,26 @@ export interface Product {
   vatRate: string;
   rating: string;
   reviewsCount: number;
+  isFeatured: boolean;
+  isOnSale: boolean;
+  isNew: boolean;
   status: string;
   images: ProductImage[];
   brand: Brand | null;
   category: Pick<Category, 'id' | 'name' | 'slug'>;
   merchant: MerchantSummary;
+}
+
+export interface Banner {
+  id: string;
+  title: MultiLangText;
+  subtitle: MultiLangText | null;
+  imageUrlDesktop: string;
+  imageUrlMobile: string | null;
+  linkUrl: string | null;
+  position: 'HOME_MAIN' | 'HOME_SECONDARY' | 'CATEGORY_TOP' | 'SIDEBAR';
+  sortOrder: number;
+  category: Pick<Category, 'id' | 'name' | 'slug'> | null;
 }
 
 export interface Paginated<T> {

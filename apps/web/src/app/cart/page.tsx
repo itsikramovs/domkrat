@@ -1,6 +1,6 @@
 'use client';
 
-import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -28,74 +28,88 @@ export default function CartPage() {
   if (!accessToken) return null;
 
   if (isLoading || !data) {
-    return <div className="container py-12 text-center text-muted-foreground">Загрузка корзины…</div>;
+    return <div className="py-12 text-center text-sm text-muted-foreground">Загрузка корзины…</div>;
   }
 
   if (data.items.length === 0) {
     return (
-      <div className="container py-12 text-center space-y-4">
-        <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground" />
-        <h1 className="text-2xl font-bold">Корзина пуста</h1>
-        <p className="text-muted-foreground">Добавьте товары из каталога</p>
-        <Button asChild>
-          <Link href="/">В каталог</Link>
+      <div className="space-y-4 px-4 py-12 text-center md:container">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-secondary">
+          <ShoppingBag className="h-9 w-9 text-muted-foreground" />
+        </div>
+        <h1 className="text-xl font-bold md:text-2xl">Корзина пуста</h1>
+        <p className="text-sm text-muted-foreground">Добавьте товары из каталога</p>
+        <Button asChild size="lg" className="rounded-full">
+          <Link href="/">Перейти в каталог</Link>
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="container py-8 grid gap-6 lg:grid-cols-[1fr_360px]">
-      <div className="space-y-3">
-        <h1 className="text-3xl font-bold">Корзина</h1>
+    <div className="space-y-4 pb-32 md:container md:pb-8 md:py-8 md:grid md:gap-6 md:space-y-0 md:[grid-template-columns:1fr_360px]">
+      <div className="space-y-3 px-4 md:px-0">
+        <h1 className="text-xl font-bold md:text-3xl">Корзина · {data.items.length}</h1>
         {data.items.map((item) => (
-          <Card key={item.id}>
-            <CardContent className="p-4 flex gap-4">
-              <div className="h-20 w-20 rounded bg-muted flex items-center justify-center text-2xl shrink-0">🔧</div>
-              <div className="flex-1 min-w-0">
+          <Card key={item.id} className="overflow-hidden">
+            <CardContent className="flex gap-3 p-3 md:gap-4 md:p-4">
+              <Link
+                href={`/p/${item.product.slug}`}
+                className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-secondary text-2xl md:h-24 md:w-24"
+              >
+                🔧
+              </Link>
+              <div className="min-w-0 flex-1">
                 <Link
                   href={`/p/${item.product.slug}`}
-                  className="font-medium line-clamp-2 hover:text-primary"
+                  className="line-clamp-2 text-sm font-medium hover:text-primary"
                 >
                   {pickLocale(item.product.name)}
                 </Link>
-                <div className="text-xs text-muted-foreground">Артикул: {item.product.sku}</div>
-                <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="inline-flex items-center rounded-md border">
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                <div className="mt-0.5 text-[11px] font-mono text-muted-foreground">
+                  {item.product.sku}
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center rounded-full bg-secondary">
+                    <button
+                      type="button"
                       disabled={item.quantity <= 1 || update.isPending}
                       onClick={() => update.mutate({ id: item.id, quantity: item.quantity - 1 })}
+                      className="flex h-8 w-8 items-center justify-center text-foreground disabled:opacity-40"
+                      aria-label="Уменьшить"
                     >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="w-10 text-center text-sm">{item.quantity}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                      {item.quantity}
+                    </span>
+                    <button
+                      type="button"
                       disabled={update.isPending}
                       onClick={() => update.mutate({ id: item.id, quantity: item.quantity + 1 })}
+                      className="flex h-8 w-8 items-center justify-center disabled:opacity-40"
+                      aria-label="Увеличить"
                     >
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold">
+                    <div className="text-sm font-bold tabular-nums">
                       {formatPrice(Number(item.product.price) * item.quantity)}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
                       {formatPrice(item.product.price)} × {item.quantity}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <button
+                    type="button"
                     onClick={() => remove.mutate(item.id)}
                     disabled={remove.isPending}
+                    className="flex h-8 w-8 items-center justify-center text-destructive disabled:opacity-40"
+                    aria-label="Удалить"
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </CardContent>
@@ -103,9 +117,10 @@ export default function CartPage() {
         ))}
       </div>
 
-      <aside className="space-y-3">
+      {/* Desktop sticky summary */}
+      <aside className="hidden md:block">
         <Card className="sticky top-20">
-          <CardContent className="p-6 space-y-3">
+          <CardContent className="space-y-3 p-6">
             <h2 className="font-semibold">Итого</h2>
             <Row label="Товары" value={formatPrice(data.pricing.subtotal)} />
             <Row label="НДС (включён)" value={formatPrice(data.pricing.vatAmount)} muted />
@@ -122,6 +137,23 @@ export default function CartPage() {
           </CardContent>
         </Card>
       </aside>
+
+      {/* Mobile sticky checkout bar */}
+      <div
+        className="fixed inset-x-0 bottom-16 z-40 flex items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+      >
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">К оплате</span>
+          <span className="text-lg font-bold tabular-nums">{formatPrice(data.pricing.total)}</span>
+        </div>
+        <Link
+          href="/checkout"
+          className="inline-flex h-11 flex-1 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
+        >
+          Оформить заказ
+        </Link>
+      </div>
     </div>
   );
 }

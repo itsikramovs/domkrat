@@ -10,7 +10,13 @@ import { useAddToCart } from '@/lib/api/cart';
 import { ApiHttpError } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/auth-store';
 
-export function AddToCartButton({ productId }: { productId: string }) {
+interface Props {
+  productId: string;
+  /** Компактный режим — только синяя кнопка "+ В корзину" без счётчика (для каталога/каруселей). */
+  compact?: boolean;
+}
+
+export function AddToCartButton({ productId, compact = false }: Props) {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
   const addToCart = useAddToCart();
@@ -23,13 +29,27 @@ export function AddToCartButton({ productId }: { productId: string }) {
       return;
     }
     try {
-      await addToCart.mutateAsync({ productId, quantity: qty });
+      await addToCart.mutateAsync({ productId, quantity: compact ? 1 : qty });
       toast.success('Добавлено в корзину');
     } catch (error) {
       const msg = error instanceof ApiHttpError ? error.body.message : 'Не удалось добавить';
       toast.error(msg);
     }
   };
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={handle}
+        disabled={addToCart.isPending}
+        className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
+      >
+        <Plus className="h-4 w-4" />
+        {addToCart.isPending ? 'Добавляем…' : 'В корзину'}
+      </button>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-3">

@@ -1,94 +1,120 @@
-import Link from 'next/link';
-
+import { BrandsCarousel } from '@/components/home/brands-carousel';
+import { CarOnboarding } from '@/components/home/car-onboarding';
+import { CategoryTile } from '@/components/home/category-tile';
+import { HeroBanner } from '@/components/home/hero-banner';
+import { HorizontalProducts } from '@/components/home/horizontal-products';
+import { ProductCard } from '@/components/home/product-card';
+import { SecondaryBanner } from '@/components/home/secondary-banner';
+import { SectionHeader } from '@/components/home/section-header';
+import { VinSearch } from '@/components/home/vin-search';
 import { serverApi } from '@/lib/api-client';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { formatPrice, pickLocale } from '@/lib/utils';
-import type { Category, Paginated, Product } from '@/lib/types';
+import type { Banner, Brand, Category, Paginated, Product } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+async function safe<T>(p: Promise<T>, fallback: T): Promise<T> {
+  return p.catch(() => fallback);
+}
+
 export default async function HomePage() {
   const api = serverApi();
-  const [categories, products] = await Promise.all([
-    api<Category[]>('/categories').catch(() => []),
-    api<Paginated<Product>>('/products?perPage=8&sort=popular').catch(
-      () => ({ data: [], meta: { page: 1, perPage: 8, total: 0, totalPages: 0 } }),
-    ),
+  const empty = { data: [] as Product[], meta: { page: 1, perPage: 0, total: 0, totalPages: 0 } };
+
+  const [
+    heroBanners,
+    secondaryBanners,
+    categories,
+    seasonProducts,
+    maintenance,
+    body,
+    accessories,
+    cosmetics,
+    electronics,
+    brands,
+  ] = await Promise.all([
+    safe(api<Banner[]>('/banners?position=HOME_MAIN&limit=1'), []),
+    safe(api<Banner[]>('/banners?position=HOME_SECONDARY&limit=1'), []),
+    safe(api<Category[]>('/categories'), []),
+    safe(api<Paginated<Product>>('/products?featured=true&perPage=8&sort=popular'), empty),
+    safe(api<Paginated<Product>>('/products?categorySlug=fluids&perPage=6&sort=popular'), empty),
+    safe(api<Paginated<Product>>('/products?categorySlug=body-parts&perPage=6&sort=popular'), empty),
+    safe(api<Paginated<Product>>('/products?categorySlug=accessories&perPage=6&sort=popular'), empty),
+    safe(api<Paginated<Product>>('/products?categorySlug=consumables&perPage=6&sort=popular'), empty),
+    safe(api<Paginated<Product>>('/products?categorySlug=electrical&perPage=6&sort=popular'), empty),
+    safe(api<Brand[]>('/brands/popular?limit=10'), []),
   ]);
 
+  const hero = heroBanners[0];
+  const secondary = secondaryBanners[0];
+
   return (
-    <div className="container py-8 space-y-12">
-      <section className="rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-8 md:p-12">
-        <div className="max-w-2xl space-y-4">
-          <h1 className="text-3xl md:text-5xl font-bold tracking-tight">
-            Автозапчасти для Узбекистана
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Тысячи товаров от проверенных мерчантов. Подбор по марке авто, по VIN или OEM-номеру.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/c/tires-and-wheels">Перейти в каталог</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/search">Поиск по OEM</Link>
-            </Button>
-          </div>
+    <div className="space-y-6 py-3 md:container md:py-6">
+      {hero ? (
+        <div className="px-4 md:px-0">
+          <HeroBanner banner={hero} />
         </div>
-      </section>
+      ) : null}
 
       <section>
-        <div className="mb-6 flex items-end justify-between">
-          <h2 className="text-2xl font-bold">Категории</h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+        <SectionHeader title="Категории" href="/catalog" />
+        <div className="grid grid-cols-4 gap-3 px-4 md:grid-cols-6 md:gap-4 md:px-0 lg:grid-cols-10">
           {categories.slice(0, 10).map((c) => (
-            <Link key={c.id} href={`/c/${c.slug}`}>
-              <Card className="hover:border-primary transition-colors h-full">
-                <CardContent className="p-4 flex flex-col gap-2">
-                  <div className="text-lg">📦</div>
-                  <div className="font-medium text-sm">{pickLocale(c.name)}</div>
-                  {c.children && c.children.length > 0 ? (
-                    <div className="text-xs text-muted-foreground">{c.children.length} подкатегорий</div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </Link>
+            <CategoryTile key={c.id} category={c} />
+          ))}
+        </div>
+      </section>
+
+      <CarOnboarding />
+
+      <section>
+        <SectionHeader title="Товары сезона" href="/c/tires-and-wheels" />
+        <HorizontalProducts products={seasonProducts.data} />
+      </section>
+
+      {secondary ? (
+        <div className="px-4 md:px-0">
+          <SecondaryBanner banner={secondary} />
+        </div>
+      ) : null}
+
+      <VinSearch />
+
+      <section>
+        <SectionHeader title="Товары для ТО" href="/c/fluids" />
+        <HorizontalProducts products={maintenance.data} />
+      </section>
+
+      <section>
+        <SectionHeader title="Кузовные детали" href="/c/body-parts" />
+        <HorizontalProducts products={body.data} />
+      </section>
+
+      <section>
+        <SectionHeader title="Аксессуары" href="/c/accessories" />
+        <HorizontalProducts products={accessories.data} />
+      </section>
+
+      <section>
+        <SectionHeader title="Автокосметика" href="/c/consumables" />
+        <div className="grid grid-cols-2 gap-3 px-4 md:grid-cols-4 md:px-0">
+          {cosmetics.data.slice(0, 4).map((p) => (
+            <ProductCard key={p.id} product={p} />
           ))}
         </div>
       </section>
 
       <section>
-        <div className="mb-6 flex items-end justify-between">
-          <h2 className="text-2xl font-bold">Популярные товары</h2>
-          <Button asChild variant="link">
-            <Link href="/c/consumables">Все товары →</Link>
-          </Button>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {products.data.map((p) => (
-            <Link key={p.id} href={`/p/${p.slug}`}>
-              <Card className="h-full hover:border-primary transition-colors">
-                <CardContent className="p-4 flex flex-col gap-2 h-full">
-                  <div className="aspect-square bg-muted rounded-md flex items-center justify-center text-3xl">
-                    🔧
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {p.brand?.name ?? ''} · {p.merchant.brandName}
-                  </div>
-                  <div className="font-medium text-sm line-clamp-2 min-h-[2.5rem]">{pickLocale(p.name)}</div>
-                  <div className="mt-auto text-lg font-bold text-primary">{formatPrice(p.price)}</div>
-                </CardContent>
-              </Card>
-            </Link>
+        <SectionHeader title="Автоэлектроника" href="/c/electrical" />
+        <div className="grid grid-cols-2 gap-3 px-4 md:grid-cols-4 md:px-0">
+          {electronics.data.slice(0, 4).map((p) => (
+            <ProductCard key={p.id} product={p} />
           ))}
-          {products.data.length === 0 ? (
-            <div className="col-span-full text-center text-muted-foreground py-8">
-              Товары не найдены
-            </div>
-          ) : null}
         </div>
+      </section>
+
+      <section className="pb-2">
+        <SectionHeader title="Бренды" href="/brands" />
+        <BrandsCarousel brands={brands} />
       </section>
     </div>
   );

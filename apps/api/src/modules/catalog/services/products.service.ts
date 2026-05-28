@@ -40,8 +40,13 @@ export class ProductsService {
       status: ProductStatus.ACTIVE,
     };
     if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.categorySlug) where.category = { slug: query.categorySlug };
     if (query.brandId) where.brandId = query.brandId;
+    if (query.brandSlug) where.brand = { slug: query.brandSlug };
     if (query.merchantId) where.merchantId = query.merchantId;
+    if (query.featured) where.isFeatured = true;
+    if (query.onSale) where.isOnSale = true;
+    if (query.isNew) where.isNew = true;
     if (query.priceMin !== undefined || query.priceMax !== undefined) {
       where.price = {};
       if (query.priceMin !== undefined) where.price.gte = new Prisma.Decimal(query.priceMin);

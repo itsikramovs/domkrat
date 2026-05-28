@@ -22,6 +22,10 @@ const config: Config = {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
         },
+        hero: {
+          DEFAULT: 'hsl(var(--hero))',
+          foreground: 'hsl(var(--hero-foreground))',
+        },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
           foreground: 'hsl(var(--secondary-foreground))',
@@ -29,6 +33,18 @@ const config: Config = {
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
+        },
+        sale: {
+          DEFAULT: 'hsl(var(--sale))',
+          foreground: 'hsl(var(--sale-foreground))',
+        },
+        hit: {
+          DEFAULT: 'hsl(var(--hit))',
+          foreground: 'hsl(var(--hit-foreground))',
+        },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
         },
         muted: {
           DEFAULT: 'hsl(var(--muted))',

@@ -1,3 +1,4 @@
+import { ChevronRight, ShieldCheck, Star, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -25,6 +26,14 @@ export async function generateMetadata({ params }: PageProps) {
   }
 }
 
+function discountPct(price: string, compareAt: string | null): number | null {
+  if (!compareAt) return null;
+  const p = Number(price);
+  const c = Number(compareAt);
+  if (c <= p) return null;
+  return Math.round(((c - p) / c) * 100);
+}
+
 export default async function ProductPage({ params }: PageProps) {
   const [product, reviews] = await Promise.all([
     serverApi()<Product & {
@@ -43,42 +52,101 @@ export default async function ProductPage({ params }: PageProps) {
 
   if (!product) notFound();
 
+  const pct = discountPct(product.price, product.compareAtPrice);
+  const rating = Number(product.rating) || 0;
+
   return (
-    <div className="container py-8 space-y-6">
-      <nav className="text-sm text-muted-foreground">
-        <Link href="/" className="hover:underline">Главная</Link> /{' '}
-        <Link href={`/c/${product.category.slug}`} className="hover:underline">
+    <div className="space-y-5 pb-32 md:container md:pb-8 md:py-8">
+      {/* Хлебные крошки */}
+      <nav className="flex items-center gap-1 px-4 pt-4 text-xs text-muted-foreground md:px-0">
+        <Link href="/" className="hover:text-foreground">Главная</Link>
+        <ChevronRight className="h-3 w-3" />
+        <Link href={`/c/${product.category.slug}`} className="hover:text-foreground">
           {pickLocale(product.category.name)}
-        </Link>{' '}
-        / <span className="text-foreground">{pickLocale(product.name)}</span>
+        </Link>
+        <ChevronRight className="h-3 w-3" />
+        <span className="line-clamp-1 text-foreground">{pickLocale(product.name)}</span>
       </nav>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        <div className="aspect-square bg-muted rounded-2xl flex items-center justify-center text-9xl">
-          🔧
+      <div className="grid gap-6 md:grid-cols-2 md:gap-10">
+        {/* Картинка */}
+        <div className="relative">
+          <div className="aspect-square w-full overflow-hidden md:rounded-3xl bg-secondary">
+            {product.images?.[0]?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={product.images[0].url}
+                alt={pickLocale(product.name)}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-8xl text-muted-foreground/40">
+                🔧
+              </div>
+            )}
+          </div>
+          {pct ? (
+            <span className="absolute left-3 top-3 inline-flex items-center rounded-md bg-sale px-2 py-1 text-xs font-bold text-sale-foreground">
+              −{pct}%
+            </span>
+          ) : null}
         </div>
 
-        <div className="space-y-4">
+        {/* Информация */}
+        <div className="space-y-4 px-4 md:px-0">
           <div className="space-y-2">
-            <div className="flex flex-wrap gap-2 text-sm">
+            <div className="flex flex-wrap gap-1.5 text-xs">
               {product.brand ? <Badge variant="outline">{product.brand.name}</Badge> : null}
               <Badge variant="secondary">{product.merchant.brandName}</Badge>
               {product.oemNumber ? (
                 <Badge variant="outline" className="font-mono">OEM: {product.oemNumber}</Badge>
               ) : null}
             </div>
-            <h1 className="text-3xl font-bold">{pickLocale(product.name)}</h1>
-            <p className="text-sm text-muted-foreground">Артикул: {product.sku}</p>
+            <h1 className="text-xl font-bold leading-tight md:text-2xl">{pickLocale(product.name)}</h1>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {product.reviewsCount > 0 ? (
+                <span className="inline-flex items-center gap-1">
+                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                  <span className="font-medium text-foreground">{rating.toFixed(1)}</span>
+                  <span>· {product.reviewsCount} отзывов</span>
+                </span>
+              ) : null}
+              <span>Артикул: {product.sku}</span>
+            </div>
           </div>
 
-          <div className="text-4xl font-bold text-primary">{formatPrice(product.price)}</div>
+          <div className="flex items-baseline gap-3">
+            <div className="text-3xl font-bold text-foreground tabular-nums md:text-4xl">
+              {formatPrice(product.price)}
+            </div>
+            {product.compareAtPrice ? (
+              <div className="text-base text-muted-foreground line-through tabular-nums">
+                {formatPrice(product.compareAtPrice)}
+              </div>
+            ) : null}
+          </div>
 
-          <AddToCartButton productId={product.id} />
+          {/* Доверие */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
+              <Truck className="h-4 w-4 text-primary" />
+              <span>Доставка по Узбекистану</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span>Гарантия качества</span>
+            </div>
+          </div>
+
+          {/* На десктопе кнопка прямо здесь; на мобильном — sticky bar внизу */}
+          <div className="hidden md:block">
+            <AddToCartButton productId={product.id} />
+          </div>
 
           {product.description ? (
-            <div className="pt-4 prose max-w-none">
-              <h3 className="text-lg font-semibold mb-2">Описание</h3>
-              <p className="text-sm text-muted-foreground whitespace-pre-line">
+            <div className="prose max-w-none pt-2">
+              <h3 className="mb-2 text-base font-semibold">Описание</h3>
+              <p className="whitespace-pre-line text-sm text-muted-foreground">
                 {pickLocale(product.description)}
               </p>
             </div>
@@ -87,10 +155,10 @@ export default async function ProductPage({ params }: PageProps) {
       </div>
 
       {product.oemCodes && product.oemCodes.length > 0 ? (
-        <Card>
-          <CardContent className="p-6 space-y-2">
-            <h3 className="font-semibold">OEM-номера и аналоги</h3>
-            <div className="flex flex-wrap gap-2">
+        <Card className="mx-4 md:mx-0">
+          <CardContent className="space-y-2 p-5">
+            <h3 className="text-sm font-semibold">OEM-номера и аналоги</h3>
+            <div className="flex flex-wrap gap-1.5">
               {product.oemCodes.map((o) => (
                 <Badge key={o.oemNumber} variant={o.isPrimary ? 'default' : 'outline'} className="font-mono">
                   {o.manufacturer ? `${o.manufacturer} ` : ''}
@@ -103,10 +171,10 @@ export default async function ProductPage({ params }: PageProps) {
       ) : null}
 
       {product.compatibilities && product.compatibilities.length > 0 ? (
-        <Card>
-          <CardContent className="p-6 space-y-3">
-            <h3 className="font-semibold">Совместимость</h3>
-            <ul className="space-y-1 text-sm text-muted-foreground">
+        <Card className="mx-4 md:mx-0">
+          <CardContent className="space-y-2 p-5">
+            <h3 className="text-sm font-semibold">Совместимость</h3>
+            <ul className="space-y-1 text-xs text-muted-foreground">
               {product.compatibilities.map((c, idx) => {
                 const label = c.carModification
                   ? `${c.carModification.generation.model.make.name} ${c.carModification.generation.model.name} ${c.carModification.generation.name} ${c.carModification.name}`
@@ -121,12 +189,28 @@ export default async function ProductPage({ params }: PageProps) {
         </Card>
       ) : null}
 
-      <ReviewsSection
-        productId={product.id}
-        productRating={product.rating}
-        reviewsCount={product.reviewsCount}
-        initialReviews={reviews}
-      />
+      <div className="px-4 md:px-0">
+        <ReviewsSection
+          productId={product.id}
+          productRating={product.rating}
+          reviewsCount={product.reviewsCount}
+          initialReviews={reviews}
+        />
+      </div>
+
+      {/* Sticky bottom bar для мобильного: цена + кнопка */}
+      <div
+        className="fixed inset-x-0 bottom-16 z-40 flex items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+      >
+        <div className="flex flex-col">
+          <span className="text-xs text-muted-foreground">К оплате</span>
+          <span className="text-lg font-bold tabular-nums">{formatPrice(product.price)}</span>
+        </div>
+        <div className="flex-1">
+          <AddToCartButton productId={product.id} compact />
+        </div>
+      </div>
     </div>
   );
 }

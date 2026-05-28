@@ -2,6 +2,11 @@
 node_modules/
 .pnpm-store/
 
+# Local skill installations (npx skills add)
+.agents/
+.claude/skills/
+skills-lock.json
+
 # Build artifacts
 dist/
 build/

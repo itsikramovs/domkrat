@@ -75,8 +75,62 @@ async function main(): Promise<void> {
   await seedDeliveryMethods();
   await seedNotificationTemplates();
   await seedSettingsAndFaq();
+  await seedBanners();
 
   console.log('[seed] done ✓');
+}
+
+// ---------------------------------------------------------------------------
+async function seedBanners(): Promise<void> {
+  const banners = [
+    {
+      id: 'b0000000-0000-4000-8000-000000000001',
+      position: 'HOME_MAIN' as const,
+      title: ml('Bridgestone Blizzak −30%', 'Bridgestone Blizzak −30%'),
+      subtitle: ml('Полный комплект от 2 940 000 сум', 'To\'plam 2 940 000 so\'mdan'),
+      imageUrlDesktop: '/banners/bridgestone-hero.svg',
+      linkUrl: '/c/tires-and-wheels',
+      sortOrder: 0,
+    },
+    {
+      id: 'b0000000-0000-4000-8000-000000000002',
+      position: 'HOME_SECONDARY' as const,
+      title: ml('Шины зимние Bridgestone Blizzak', 'Qishki shinalar Bridgestone Blizzak'),
+      subtitle: ml('Закажите через VIN-поиск или каталог', 'VIN-qidiruv yoki katalog orqali buyurtma bering'),
+      imageUrlDesktop: '/banners/bridgestone-secondary.svg',
+      linkUrl: '/c/tires-and-wheels/winter-tires',
+      sortOrder: 0,
+    },
+  ];
+  for (const b of banners) {
+    await prisma.banner.upsert({
+      where: { id: b.id },
+      update: {
+        title: b.title,
+        subtitle: b.subtitle,
+        imageUrlDesktop: b.imageUrlDesktop,
+        linkUrl: b.linkUrl,
+        position: b.position,
+        sortOrder: b.sortOrder,
+        isActive: true,
+        validFrom: new Date('2026-01-01'),
+        validUntil: new Date('2027-12-31'),
+      },
+      create: {
+        id: b.id,
+        title: b.title,
+        subtitle: b.subtitle,
+        imageUrlDesktop: b.imageUrlDesktop,
+        linkUrl: b.linkUrl,
+        position: b.position,
+        sortOrder: b.sortOrder,
+        isActive: true,
+        validFrom: new Date('2026-01-01'),
+        validUntil: new Date('2027-12-31'),
+      },
+    });
+  }
+  console.log(`  • banners: ${banners.length}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,26 +411,26 @@ async function seedMerchants(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 async function seedCategoriesAndBrands(): Promise<void> {
-  // Категории (parent + children)
+  // Категории (parent + children). iconUrl = публичные ассеты apps/web/public/categories/*.svg
   const rootCategories = [
-    { slug: 'tires-and-wheels', name: ml('Шины и диски', 'Shinalar va disklar') },
-    { slug: 'consumables', name: ml('Расходные материалы', 'Sarflanadigan materiallar') },
-    { slug: 'brake-system', name: ml('Тормозная система', 'Tormoz tizimi') },
-    { slug: 'engine-parts', name: ml('Двигатель', 'Dvigatel') },
-    { slug: 'electrical', name: ml('Электрика', 'Elektrika') },
-    { slug: 'body-parts', name: ml('Кузовные запчасти', 'Korpus ehtiyot qismlari') },
-    { slug: 'suspension', name: ml('Подвеска и рулевое', 'Osma va rulli') },
-    { slug: 'interior', name: ml('Салон', 'Salon') },
-    { slug: 'fluids', name: ml('Жидкости и масла', 'Suyuqliklar va yog\'lar') },
-    { slug: 'accessories', name: ml('Аксессуары', 'Aksessuarlar') },
+    { slug: 'fluids', name: ml('Моторные масла', 'Motor yog\'lari'), iconUrl: '/categories/oil.svg' },
+    { slug: 'tires-and-wheels', name: ml('Шины и диски', 'Shinalar va disklar'), iconUrl: '/categories/tire.svg' },
+    { slug: 'body-parts', name: ml('Кузовные', 'Korpus'), iconUrl: '/categories/body.svg' },
+    { slug: 'interior', name: ml('Салон и чехлы', 'Salon va g\'iloflar'), iconUrl: '/categories/seat.svg' },
+    { slug: 'consumables', name: ml('Расходники', 'Sarflanadigan'), iconUrl: '/categories/filter.svg' },
+    { slug: 'brake-system', name: ml('Тормозная система', 'Tormoz tizimi'), iconUrl: '/categories/brake.svg' },
+    { slug: 'engine-parts', name: ml('Двигатель', 'Dvigatel'), iconUrl: '/categories/engine.svg' },
+    { slug: 'electrical', name: ml('Электрика', 'Elektrika'), iconUrl: '/categories/battery.svg' },
+    { slug: 'suspension', name: ml('Подвеска и рулевое', 'Osma va rulli'), iconUrl: '/categories/suspension.svg' },
+    { slug: 'accessories', name: ml('Аксессуары', 'Aksessuarlar'), iconUrl: '/categories/accessory.svg' },
   ];
 
   for (let i = 0; i < rootCategories.length; i++) {
     const cat = rootCategories[i]!;
     await prisma.category.upsert({
       where: { slug: cat.slug },
-      update: {},
-      create: { slug: cat.slug, name: cat.name, position: i, level: 0 },
+      update: { name: cat.name, iconUrl: cat.iconUrl, position: i },
+      create: { slug: cat.slug, name: cat.name, iconUrl: cat.iconUrl, position: i, level: 0 },
     });
   }
 
@@ -397,27 +451,39 @@ async function seedCategoriesAndBrands(): Promise<void> {
     }
   }
 
-  // Бренды
-  const brands = [
-    'Bosch',
-    'Mann',
-    'Mahle',
-    'Denso',
-    'NGK',
-    'Brembo',
-    'Continental',
-    'Castrol',
-    'Mobil 1',
-    'Hyundai',
-    'Toyota',
-    'Knecht',
+  // Бренды (порядок position определяет позицию в карусели брендов)
+  const brands: Array<{ name: string; logoUrl?: string }> = [
+    { name: 'Toyota', logoUrl: '/brands/toyota.svg' },
+    { name: 'Hyundai', logoUrl: '/brands/hyundai.svg' },
+    { name: 'KIA', logoUrl: '/brands/kia.svg' },
+    { name: 'Chevrolet', logoUrl: '/brands/chevrolet.svg' },
+    { name: 'Lexus', logoUrl: '/brands/lexus.svg' },
+    { name: 'UAZ', logoUrl: '/brands/uaz.svg' },
+    { name: 'Lada', logoUrl: '/brands/lada.svg' },
+    { name: 'BMW', logoUrl: '/brands/bmw.svg' },
+    { name: 'Bosch', logoUrl: '/brands/bosch.svg' },
+    { name: 'Mann' },
+    { name: 'Mahle' },
+    { name: 'Denso' },
+    { name: 'NGK' },
+    { name: 'Brembo' },
+    { name: 'Continental' },
+    { name: 'Castrol' },
+    { name: 'Mobil 1' },
+    { name: 'Knecht' },
   ];
   for (let i = 0; i < brands.length; i++) {
-    const name = brands[i]!;
+    const b = brands[i]!;
     await prisma.brand.upsert({
-      where: { name },
-      update: {},
-      create: { name, slug: name.toLowerCase().replace(/\s+/g, '-'), isActive: true, position: i },
+      where: { name: b.name },
+      update: { position: i, logoUrl: b.logoUrl, isActive: true },
+      create: {
+        name: b.name,
+        slug: b.name.toLowerCase().replace(/\s+/g, '-'),
+        isActive: true,
+        position: i,
+        logoUrl: b.logoUrl,
+      },
     });
   }
 
@@ -595,10 +661,154 @@ async function seedProducts(): Promise<void> {
     merchantId: string;
     oemNumber?: string;
     price: string;
+    compareAtPrice?: string;
     weight?: string;
+    isFeatured?: boolean;
+    isOnSale?: boolean;
+    isNew?: boolean;
   };
 
   const products: ProductSeed[] = [
+    {
+      slug: 'tire-bridgestone-blizzak-185-65-r15',
+      sku: 'BRIDGESTONE-BLIZZAK-185-65-R15',
+      nameRu: 'Шины зимние Bridgestone Blizzak 185/65 R15',
+      nameUz: 'Qishki shinalar Bridgestone Blizzak 185/65 R15',
+      categoryId: categoryTires.id,
+      brandId: continental.id,
+      merchantId: ID.merchant.type1,
+      price: '735000',
+      compareAtPrice: '1050000',
+      weight: '7.500',
+      isFeatured: true,
+      isOnSale: true,
+    },
+    {
+      slug: 'tire-michelin-pilot-sport-205-55-r16',
+      sku: 'MICHELIN-PS4-205-55-R16',
+      nameRu: 'Шины летние Michelin Pilot Sport 4 205/55 R16',
+      nameUz: 'Yozgi shinalar Michelin Pilot Sport 4 205/55 R16',
+      categoryId: categoryTires.id,
+      brandId: continental.id,
+      merchantId: ID.merchant.type2,
+      price: '890000',
+      weight: '9.000',
+      isFeatured: true,
+    },
+    {
+      slug: 'engine-oil-shell-helix-ultra-5w40-4l',
+      sku: 'SHELL-HELIX-5W40-4L',
+      nameRu: 'Масло моторное Shell Helix Ultra 5W-40 4 л',
+      nameUz: 'Motor moyi Shell Helix Ultra 5W-40 4 l',
+      categoryId: categoryFluids.id,
+      brandId: castrol.id,
+      merchantId: ID.merchant.type1,
+      price: '420000',
+      compareAtPrice: '480000',
+      weight: '3.700',
+      isFeatured: true,
+      isOnSale: true,
+    },
+    {
+      slug: 'engine-oil-mobil1-5w30-4l',
+      sku: 'MOBIL1-5W30-4L',
+      nameRu: 'Масло моторное JC ES 5W-30 синтетическое, 4 л',
+      nameUz: 'Motor moyi JC ES 5W-30 sintetik, 4 l',
+      categoryId: categoryFluids.id,
+      brandId: castrol.id,
+      merchantId: ID.merchant.type2,
+      price: '380000',
+      weight: '3.700',
+      isNew: true,
+    },
+    {
+      slug: 'headlight-led-camry-2019-2024',
+      sku: 'LED-CAMRY-19-24',
+      nameRu: 'Фара передняя левая LED для Toyota Camry 2019—2024',
+      nameUz: 'Old chap LED faraTo Toyota Camry 2019—2024',
+      categoryId: categoryBrake.id,
+      brandId: brembo.id,
+      merchantId: ID.merchant.type1,
+      price: '1240000',
+      compareAtPrice: '1480000',
+      weight: '3.000',
+      isOnSale: true,
+      isFeatured: true,
+    },
+    {
+      slug: 'floor-mats-cobalt-3d',
+      sku: 'MATS-COBALT-3D',
+      nameRu: 'Коврики салона резиновые 3D EVA для Chevrolet Cobalt',
+      nameUz: 'Chevrolet Cobalt uchun 3D EVA gilamchalari',
+      categoryId: categoryConsum.id,
+      brandId: bosch.id,
+      merchantId: ID.merchant.type1,
+      price: '485000',
+      compareAtPrice: '625000',
+      weight: '2.500',
+      isOnSale: true,
+      isFeatured: true,
+    },
+    {
+      slug: 'seat-covers-universal-4',
+      sku: 'COVERS-UNI-4',
+      nameRu: 'Чехлы универсальные текстильные, комплект 4 шт.',
+      nameUz: 'Universal chexollar, 4 dona to\'plam',
+      categoryId: categoryConsum.id,
+      brandId: bosch.id,
+      merchantId: ID.merchant.type2,
+      price: '185000',
+      weight: '1.800',
+      isFeatured: true,
+    },
+    {
+      slug: 'turtle-wax-polish-t478',
+      sku: 'TW-T478',
+      nameRu: 'Полироль для кузова Turtle Wax T-478 Original',
+      nameUz: 'Korpus polishi Turtle Wax T-478 Original',
+      categoryId: categoryConsum.id,
+      brandId: castrol.id,
+      merchantId: ID.merchant.type1,
+      price: '85000',
+      weight: '0.450',
+      isFeatured: true,
+    },
+    {
+      slug: 'sonax-gloss-shampoo-1l',
+      sku: 'SONAX-GLOSS-1L',
+      nameRu: 'Шампунь автомобильный Sonax Gloss Shampoo 1 л',
+      nameUz: 'Sonax Gloss avtomobil shampuni 1 l',
+      categoryId: categoryConsum.id,
+      brandId: castrol.id,
+      merchantId: ID.merchant.type2,
+      price: '125000',
+      weight: '1.000',
+      isFeatured: true,
+    },
+    {
+      slug: 'osram-night-breaker-h7-50w',
+      sku: 'OSRAM-NB-H7',
+      nameRu: 'Лампа галогенная Osram Night Breaker H7 12V 55W',
+      nameUz: 'Osram Night Breaker H7 12V 55W chiroq lampasi',
+      categoryId: categoryConsum.id,
+      brandId: bosch.id,
+      merchantId: ID.merchant.type1,
+      price: '125000',
+      weight: '0.060',
+      isFeatured: true,
+    },
+    {
+      slug: 'starter-relay-12v',
+      sku: 'STARTER-REL-12V',
+      nameRu: 'Реле стартера 12V Behr Hella 4MD003520-08',
+      nameUz: 'Starter rele 12V Behr Hella 4MD003520-08',
+      categoryId: categoryConsum.id,
+      brandId: bosch.id,
+      merchantId: ID.merchant.type2,
+      price: '85000',
+      weight: '0.150',
+      isFeatured: true,
+    },
     {
       slug: 'air-filter-bosch-1457433721',
       sku: 'BOSCH-1457433721',
@@ -676,24 +886,27 @@ async function seedProducts(): Promise<void> {
   }
 
   for (const p of products) {
+    const data = {
+      categoryId: p.categoryId,
+      brandId: p.brandId,
+      slug: p.slug,
+      name: ml(p.nameRu, p.nameUz),
+      description: ml(`${p.nameRu} — оригинальная запчасть.`, `${p.nameUz} — original ehtiyot qism.`),
+      oemNumber: p.oemNumber,
+      price: new Prisma.Decimal(p.price),
+      compareAtPrice: p.compareAtPrice ? new Prisma.Decimal(p.compareAtPrice) : null,
+      weight: p.weight ? new Prisma.Decimal(p.weight) : null,
+      vatRate: new Prisma.Decimal('12'),
+      status: ProductStatus.ACTIVE,
+      isFeatured: p.isFeatured ?? false,
+      isOnSale: p.isOnSale ?? false,
+      isNew: p.isNew ?? false,
+      publishedAt: new Date(),
+    };
     await prisma.product.upsert({
       where: { merchantId_sku: { merchantId: p.merchantId, sku: p.sku } },
-      update: {},
-      create: {
-        merchantId: p.merchantId,
-        categoryId: p.categoryId,
-        brandId: p.brandId,
-        sku: p.sku,
-        slug: p.slug,
-        name: ml(p.nameRu, p.nameUz),
-        description: ml(`${p.nameRu} — оригинальная запчасть.`, `${p.nameUz} — original ehtiyot qism.`),
-        oemNumber: p.oemNumber,
-        price: new Prisma.Decimal(p.price),
-        weight: p.weight ? new Prisma.Decimal(p.weight) : null,
-        vatRate: new Prisma.Decimal('12'),
-        status: ProductStatus.ACTIVE,
-        publishedAt: new Date(),
-      },
+      update: data,
+      create: { merchantId: p.merchantId, sku: p.sku, ...data },
     });
   }
 
