@@ -13,6 +13,8 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { ReturnsModule } from './modules/returns/returns.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -43,6 +45,8 @@ import { UsersModule } from './modules/users/users.module';
     CatalogModule,
     CartModule,
     OrdersModule,
+    ReturnsModule,
+    ReviewsModule,
     FinanceModule,
     AdminModule,
     HealthModule,
