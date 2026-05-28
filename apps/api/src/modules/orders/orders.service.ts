@@ -199,8 +199,26 @@ export class OrdersService {
             },
           });
 
-          // Резерв инвентаря (для MVP — соглашаемся с резервом без проверки stock).
-          // Реальная проверка остатков + Redis lock — задача 3.3 расширенная.
+          // Atomic decrement остатков: UPDATE ... WHERE quantity_available >= qty.
+          // Если другая транзакция уже забрала — updated.count = 0 → throw → rollback.
+          const updated = await tx.inventoryBalance.updateMany({
+            where: {
+              productId: item.product.id,
+              merchantId,
+              cellId: null,
+              quantityAvailable: { gte: item.quantity },
+            },
+            data: {
+              quantityAvailable: { decrement: item.quantity },
+              quantityReserved: { increment: item.quantity },
+            },
+          });
+          if (updated.count === 0) {
+            throw new ConflictException(
+              `Insufficient stock for ${item.product.sku} (requested ${item.quantity})`,
+            );
+          }
+
           await tx.stockReservation.create({
             data: {
               orderItemId: orderItem.id,
@@ -208,6 +226,20 @@ export class OrdersService {
               merchantId,
               quantity: item.quantity,
               expiresAt,
+            },
+          });
+
+          // Append-only audit запись о движении
+          await tx.stockMovement.create({
+            data: {
+              productId: item.product.id,
+              merchantId,
+              movementType: 'RESERVE',
+              quantity: -item.quantity,
+              referenceType: 'order',
+              referenceId: orderRow.id,
+              performedById: userId,
+              notes: `Reserved for order ${orderNumber}`,
             },
           });
         }
@@ -308,7 +340,34 @@ export class OrdersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Снимаем резервы
+      // Восстанавливаем остатки: для каждого item инвертируем decrement
+      const items = await tx.orderItem.findMany({
+        where: { orderId },
+        select: { id: true, productId: true, merchantId: true, quantity: true },
+      });
+      for (const it of items) {
+        await tx.inventoryBalance.updateMany({
+          where: { productId: it.productId, merchantId: it.merchantId, cellId: null },
+          data: {
+            quantityAvailable: { increment: it.quantity },
+            quantityReserved: { decrement: it.quantity },
+          },
+        });
+        await tx.stockMovement.create({
+          data: {
+            productId: it.productId,
+            merchantId: it.merchantId,
+            movementType: 'UNRESERVE',
+            quantity: it.quantity,
+            referenceType: 'order',
+            referenceId: orderId,
+            performedById: userId,
+            notes: 'Order cancelled',
+          },
+        });
+      }
+
+      // Снимаем активные резервы
       await tx.stockReservation.updateMany({
         where: { orderItem: { orderId }, releasedAt: null },
         data: { releasedAt: new Date(), releasedReason: 'order_cancelled' },

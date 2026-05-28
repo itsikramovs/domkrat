@@ -71,6 +71,7 @@ async function main(): Promise<void> {
   await seedCars();
   await seedProducts();
   await seedWarehouse();
+  await seedInventory();
   await seedDeliveryMethods();
   await seedNotificationTemplates();
   await seedSettingsAndFaq();
@@ -789,6 +790,48 @@ async function seedWarehouse(): Promise<void> {
   }
 
   console.log(`  • warehouse: 1, zones: ${zonesData.length}, cells: ${cellsCount}`);
+}
+
+// ---------------------------------------------------------------------------
+async function seedInventory(): Promise<void> {
+  // Создаём inventory_balances для всех ACTIVE товаров:
+  //   Type 1 (FBO) — на складе платформы, 50 шт.
+  //   Type 2 (FBS) — на складе мерчанта, 20 шт.
+  // composite unique (productId, merchantId, cellId=NULL) не работает через upsert
+  // (NULL в PostgreSQL не уникален), поэтому findFirst + create.
+  const products = await prisma.product.findMany({
+    where: { status: 'ACTIVE', deletedAt: null },
+    include: { merchant: { select: { merchantType: true } } },
+  });
+
+  const now = new Date();
+  let created = 0;
+
+  for (const p of products) {
+    const isType1 = p.merchant.merchantType === 'TYPE_1';
+    const warehouseId = isType1 ? ID.warehouse.main : null;
+    const qty = isType1 ? 50 : 20;
+
+    const existing = await prisma.inventoryBalance.findFirst({
+      where: { productId: p.id, merchantId: p.merchantId, cellId: null },
+    });
+    if (!existing) {
+      await prisma.inventoryBalance.create({
+        data: {
+          productId: p.id,
+          merchantId: p.merchantId,
+          warehouseId,
+          cellId: null,
+          quantityAvailable: qty,
+          quantityReserved: 0,
+          lastReceivedAt: now,
+          oldestReceivedAt: now,
+        },
+      });
+      created++;
+    }
+  }
+  console.log(`  • inventory balances: ${created} created (already existed: ${products.length - created})`);
 }
 
 // ---------------------------------------------------------------------------
