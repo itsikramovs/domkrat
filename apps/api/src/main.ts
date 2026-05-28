@@ -6,6 +6,13 @@ import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
 
+// BigInt не сериализуется в JSON по умолчанию — наши BIGSERIAL PK
+// (stock_movements, audit_logs, order_status_history) ломали бы /orders/:id.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(BigInt.prototype as any).toJSON = function (this: bigint): string {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));

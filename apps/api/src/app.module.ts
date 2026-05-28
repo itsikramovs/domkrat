@@ -4,9 +4,11 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CartModule } from './modules/cart/cart.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -33,6 +35,8 @@ import { UsersModule } from './modules/users/users.module';
     AuthModule,
     UsersModule,
     CatalogModule,
+    CartModule,
+    OrdersModule,
     HealthModule,
   ],
 })

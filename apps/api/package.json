@@ -37,7 +37,8 @@
     "@nestjs/passport": "^10.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
-    "nodemailer": "^6.9.15"
+    "nodemailer": "^6.9.15",
+    "decimal.js": "^10.4.3"
   },
   "devDependencies": {
     "@domkrat/config": "workspace:*",
