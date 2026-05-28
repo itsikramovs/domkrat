@@ -11,6 +11,7 @@ import { BannersModule } from './modules/banners/banners.module';
 import { CarsModule } from './modules/cars/cars.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -48,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
     BannersModule,
     CarsModule,
     CartModule,
+    UploadsModule,
     OrdersModule,
     ReturnsModule,
     ReviewsModule,

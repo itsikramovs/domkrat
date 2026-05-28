@@ -25,6 +25,7 @@ import {
   UpdateProductStatusDto,
 } from '../dto/create-product.dto';
 import { ListProductsDto } from '../dto/list-products.dto';
+import { RegisterProductImageDto } from '../dto/product-image.dto';
 import { ProductsService } from '../services/products.service';
 
 @ApiTags('Merchant · Products')
@@ -86,6 +87,48 @@ export class MerchantProductsController {
   ): Promise<void> {
     this.requireMerchant(user);
     await this.products.remove(user.merchantId!, id);
+  }
+
+  // ----- Images -----
+  @Get(':id/images')
+  @ApiOperation({ summary: 'Изображения товара' })
+  listImages(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    this.requireMerchant(user);
+    return this.products.listImages(user.merchantId!, id);
+  }
+
+  @Post(':id/images')
+  @ApiOperation({ summary: 'Зарегистрировать загруженное изображение' })
+  addImage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterProductImageDto,
+  ) {
+    this.requireMerchant(user);
+    return this.products.addImage(user.merchantId!, id, dto);
+  }
+
+  @Patch(':id/images/:imageId/primary')
+  @ApiOperation({ summary: 'Сделать основным' })
+  setPrimaryImage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ) {
+    this.requireMerchant(user);
+    return this.products.setPrimaryImage(user.merchantId!, id, imageId);
+  }
+
+  @Delete(':id/images/:imageId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Удалить изображение' })
+  async removeImage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('imageId', ParseUUIDPipe) imageId: string,
+  ): Promise<void> {
+    this.requireMerchant(user);
+    await this.products.removeImage(user.merchantId!, id, imageId);
   }
 
   // ----- Compatibility -----

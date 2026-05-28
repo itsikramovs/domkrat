@@ -387,6 +387,93 @@ export class ProductsService {
     return null;
   }
 
+  /** Публичный алиас для использования из других модулей (uploads, и т.п.) */
+  async assertOwnership(merchantId: string, productId: string): Promise<void> {
+    return this.ensureOwnership(merchantId, productId);
+  }
+
+  // -------------------------------------------------------------------------
+  // Product Images (CRUD)
+  // -------------------------------------------------------------------------
+
+  async listImages(merchantId: string, productId: string) {
+    await this.ensureOwnership(merchantId, productId);
+    return this.prisma.productImage.findMany({
+      where: { productId },
+      orderBy: [{ isPrimary: 'desc' }, { position: 'asc' }],
+    });
+  }
+
+  async addImage(
+    merchantId: string,
+    productId: string,
+    data: {
+      url: string;
+      thumbnailUrl?: string;
+      width?: number;
+      height?: number;
+      fileSize?: number;
+      isPrimary?: boolean;
+    },
+  ) {
+    await this.ensureOwnership(merchantId, productId);
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.productImage.count({ where: { productId } });
+      const makePrimary = data.isPrimary || current === 0;
+      if (makePrimary) {
+        await tx.productImage.updateMany({ where: { productId }, data: { isPrimary: false } });
+      }
+      return tx.productImage.create({
+        data: {
+          productId,
+          url: data.url,
+          thumbnailUrl: data.thumbnailUrl,
+          width: data.width,
+          height: data.height,
+          fileSize: data.fileSize,
+          isPrimary: makePrimary,
+          position: current,
+        },
+      });
+    });
+  }
+
+  async setPrimaryImage(merchantId: string, productId: string, imageId: string) {
+    await this.ensureOwnership(merchantId, productId);
+    const image = await this.prisma.productImage.findFirst({
+      where: { id: imageId, productId },
+    });
+    if (!image) throw new NotFoundException('Image not found');
+    await this.prisma.$transaction([
+      this.prisma.productImage.updateMany({ where: { productId }, data: { isPrimary: false } }),
+      this.prisma.productImage.update({ where: { id: imageId }, data: { isPrimary: true } }),
+    ]);
+    return { ok: true };
+  }
+
+  async removeImage(merchantId: string, productId: string, imageId: string) {
+    await this.ensureOwnership(merchantId, productId);
+    const image = await this.prisma.productImage.findFirst({
+      where: { id: imageId, productId },
+    });
+    if (!image) throw new NotFoundException('Image not found');
+    await this.prisma.productImage.delete({ where: { id: imageId } });
+    // Если удалили primary — назначаем primary первый из оставшихся
+    if (image.isPrimary) {
+      const next = await this.prisma.productImage.findFirst({
+        where: { productId },
+        orderBy: { position: 'asc' },
+      });
+      if (next) {
+        await this.prisma.productImage.update({
+          where: { id: next.id },
+          data: { isPrimary: true },
+        });
+      }
+    }
+    return { url: image.url };
+  }
+
   private async ensureOwnership(merchantId: string, productId: string): Promise<void> {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, deletedAt: null },

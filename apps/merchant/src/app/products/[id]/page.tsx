@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { CompatibilityManager } from '@/components/compatibility-manager';
+import { ImagesManager } from '@/components/images-manager';
 import { ProductForm } from '@/components/product-form';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -162,6 +163,8 @@ export default function EditProductPage() {
           }
         }}
       />
+
+      <ImagesManager productId={id} />
 
       <CompatibilityManager productId={id} />
     </div>
