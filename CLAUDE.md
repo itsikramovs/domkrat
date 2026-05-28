@@ -3,6 +3,9 @@
 > **Этот файл читается Claude Code автоматически при работе с проектом.**
 > Он содержит критичные правила, конвенции и контекст для AI-разработки.
 
+> 🤝 **В новой сессии прочитай [`docs/CLAUDE-HANDOFF.md`](docs/CLAUDE-HANDOFF.md)** —
+> там актуальный статус проекта, что готово, что нет, и приоритезированный план следующих задач.
+
 ---
 
 ## 🔒 ИНФРАСТРУКТУРА (зафиксировано)
@@ -17,6 +20,7 @@
 - **HTTPS**: через Cloudflare Tunnel — НЕ настраивать Nginx+SSL/certbot
 
 ### КРИТИЧНО для работы:
+
 1. **Все приложения слушают `0.0.0.0`** (не localhost!) — чтобы разработчик открывал с Windows по `http://192.168.1.8:ПОРТ`. Например: `app.listen(3001, '0.0.0.0')`.
 2. **CORS** должен включать `http://192.168.1.8:3000/3002/3003` и localhost-варианты.
 3. **Frontend env**: API URL пока `http://192.168.1.8:3001/api` (позже сменится на домен).
@@ -24,12 +28,15 @@
 5. **Окружение уже подготовлено**: Docker, Docker Compose, Node 20, pnpm, git, swap, UFW — установлены вручную. НЕ переустанавливать без необходимости.
 
 ### Порты:
+
 web 3000, api 3001, merchant 3002, admin 3003, mailhog 8025, minio 9000/9001, meilisearch 7700, prisma studio 5555.
 
 ### Пароли dev (docker-compose.dev.yml):
+
 postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`, minio `minioadmin`/`minioadmin_dev`, meili `meili_dev_key`.
 
 ### MVP-подход (работает без внешних API):
+
 - **Auth**: email + пароль, подтверждение через MailHog (НЕ SMS)
 - **SMS**: mock-провайдер (Eskiz позже через .env)
 - **Email**: nodemailer → MailHog (реальный SMTP позже)
@@ -51,6 +58,7 @@ postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`,
 - **Платежи**: Click, Payme, Uzum, COD
 
 Полная документация — в папке `docs/`:
+
 - `docs/01-PROJECT-OVERVIEW.md` — обзор
 - `docs/03-ARCHITECTURE.md` — архитектура
 - `docs/04-DATABASE-SCHEMA.md` + `PART2.md` — схема БД
@@ -65,6 +73,7 @@ postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`,
 ### 1. Безопасность
 
 ❌ **НИКОГДА**:
+
 - Не коммитить секреты в Git (`.env`, API keys, пароли)
 - Не использовать `eval()`, `exec()`, `Function()` с пользовательским вводом
 - Не делать `SELECT * FROM users WHERE id = '${userId}'` (SQL injection)
@@ -73,6 +82,7 @@ postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`,
 - Не использовать `any` в TypeScript (только если ОЧЕНЬ обоснованно)
 
 ✅ **ВСЕГДА**:
+
 - Использовать Prisma queries (параметризованные)
 - Валидировать DTO через `class-validator`
 - Хэшировать пароли через **argon2** (НЕ bcrypt)
@@ -82,10 +92,12 @@ postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`,
 ### 2. Деньги
 
 ❌ **НИКОГДА**:
+
 - Не использовать `number` для денежных сумм
 - Не делать `price * 1.12` (НДС) — потеря точности
 
 ✅ **ВСЕГДА**:
+
 - Использовать `Decimal` из Prisma (`DECIMAL(15,2)`)
 - Использовать библиотеку `decimal.js` для вычислений
 - Хранить суммы в одной валюте (UZS = сумы)
@@ -93,7 +105,7 @@ postgres `domkrat`/`domkrat_dev_pass` (db: domkrat_dev), redis `redis_dev_pass`,
 
 ```typescript
 // ❌ ПЛОХО
-const total = price * quantity + (price * quantity * 0.12);
+const total = price * quantity + price * quantity * 0.12;
 
 // ✅ ХОРОШО
 import { Decimal } from 'decimal.js';
@@ -111,7 +123,10 @@ const total = subtotal.plus(vat);
 name: string;
 
 // ✅ ХОРОШО
-name: { ru: string; uz: string };
+name: {
+  ru: string;
+  uz: string;
+}
 ```
 
 ### 4. Multi-tenancy (мерчанты)
@@ -135,6 +150,7 @@ async getMyOrders(merchantId: string) {
 ### 5. Авторизация
 
 Каждый endpoint **должен** иметь:
+
 - `@UseGuards(JwtAuthGuard)` — проверка авторизации
 - `@Roles(...)` или `@CheckAbility(...)` — проверка прав
 - Декоратор Swagger для документации
@@ -159,20 +175,20 @@ async createOrder(@Body() dto: CreateOrderDto, @CurrentUser() user: User) {
 
 ### Naming
 
-| Что | Стиль | Пример |
-|-----|-------|--------|
-| Файлы | kebab-case | `user-roles.service.ts` |
-| Папки | kebab-case | `order-items/` |
-| Классы | PascalCase | `OrdersService` |
-| Интерфейсы | PascalCase + `I` префикс ❌ НЕТ | `OrderRepository`, не `IOrderRepository` |
-| Типы (DTO) | PascalCase + суффикс | `CreateOrderDto`, `OrderResponse` |
-| Переменные / функции | camelCase | `getUserById`, `totalAmount` |
-| Константы | SCREAMING_SNAKE | `MAX_CART_ITEMS = 100` |
-| Enum значения | SCREAMING_SNAKE | `OrderStatus.PAID` |
-| БД таблицы | snake_case, plural | `order_items` |
-| БД колонки | snake_case | `created_at` |
-| API URL | kebab-case | `/order-items` |
-| API JSON поля | camelCase | `{ createdAt: ... }` |
+| Что                  | Стиль                           | Пример                                   |
+| -------------------- | ------------------------------- | ---------------------------------------- |
+| Файлы                | kebab-case                      | `user-roles.service.ts`                  |
+| Папки                | kebab-case                      | `order-items/`                           |
+| Классы               | PascalCase                      | `OrdersService`                          |
+| Интерфейсы           | PascalCase + `I` префикс ❌ НЕТ | `OrderRepository`, не `IOrderRepository` |
+| Типы (DTO)           | PascalCase + суффикс            | `CreateOrderDto`, `OrderResponse`        |
+| Переменные / функции | camelCase                       | `getUserById`, `totalAmount`             |
+| Константы            | SCREAMING_SNAKE                 | `MAX_CART_ITEMS = 100`                   |
+| Enum значения        | SCREAMING_SNAKE                 | `OrderStatus.PAID`                       |
+| БД таблицы           | snake_case, plural              | `order_items`                            |
+| БД колонки           | snake_case                      | `created_at`                             |
+| API URL              | kebab-case                      | `/order-items`                           |
+| API JSON поля        | camelCase                       | `{ createdAt: ... }`                     |
 
 ### Структура модуля NestJS
 
@@ -279,12 +295,12 @@ export class OrdersService {
 
 ### Что тестируем
 
-| Слой | Тип | Coverage |
-|------|-----|----------|
-| Services | Unit tests | 80%+ |
-| Controllers | Integration tests | критичные сценарии |
-| Repositories | Через service tests | — |
-| Critical flows | E2E tests | обязательно |
+| Слой           | Тип                 | Coverage           |
+| -------------- | ------------------- | ------------------ |
+| Services       | Unit tests          | 80%+               |
+| Controllers    | Integration tests   | критичные сценарии |
+| Repositories   | Через service tests | —                  |
+| Critical flows | E2E tests           | обязательно        |
 
 ### Что MUST_HAVE покрыть тестами
 
@@ -307,10 +323,7 @@ describe('OrdersService.create', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrdersService,
-        { provide: PrismaService, useValue: mockDeep<PrismaService>() },
-      ],
+      providers: [OrdersService, { provide: PrismaService, useValue: mockDeep<PrismaService>() }],
     }).compile();
 
     service = module.get(OrdersService);
@@ -339,6 +352,7 @@ describe('OrdersService.create', () => {
 ## 📋 Перед каждым коммитом
 
 Запустить:
+
 ```bash
 pnpm lint                # ESLint
 pnpm type-check          # TypeScript
@@ -352,6 +366,7 @@ pnpm prisma format       # Форматирование schema.prisma
 ### Pre-commit hook (Husky)
 
 Уже настроен — запускается автоматически:
+
 ```
 .husky/pre-commit:
   pnpm lint-staged
@@ -363,6 +378,7 @@ pnpm prisma format       # Форматирование schema.prisma
 ## 🚀 Git workflow
 
 ### Branch naming
+
 - `feature/DKR-123-create-orders-module`
 - `fix/DKR-456-payment-webhook-bug`
 - `refactor/DKR-789-extract-pricing-service`
@@ -382,6 +398,7 @@ chore(deps): bump nestjs to 10.3.0
 ### Pull Request чеклист
 
 В описании PR:
+
 - [ ] Связан с задачей: `DKR-123`
 - [ ] Все тесты проходят локально
 - [ ] Покрытие тестами не упало
@@ -398,11 +415,13 @@ chore(deps): bump nestjs to 10.3.0
 ### Миграции
 
 ❌ **НИКОГДА**:
+
 - Не редактировать существующую миграцию (только создавать новую)
 - Не делать `db push` в production-БД
 - Не удалять колонки без deprecation периода
 
 ✅ **ВСЕГДА**:
+
 - Создавать миграции через `pnpm prisma migrate dev --name descriptive_name`
 - Тестировать миграцию на копии prod-данных
 - Писать обратимые миграции где возможно
@@ -424,6 +443,7 @@ await this.prisma.$transaction(async (tx) => {
 ### N+1 предотвращение
 
 ❌ **ПЛОХО**:
+
 ```typescript
 const orders = await prisma.order.findMany();
 for (const order of orders) {
@@ -433,6 +453,7 @@ for (const order of orders) {
 ```
 
 ✅ **ХОРОШО**:
+
 ```typescript
 const orders = await prisma.order.findMany({
   include: { items: true },
@@ -446,6 +467,7 @@ const orders = await prisma.order.findMany({
 ### Backend ответы
 
 Возвращаем мультиязычные поля как есть:
+
 ```json
 {
   "name": { "ru": "Тормозные колодки", "uz": "Tormoz kolodkalari" }
@@ -457,10 +479,9 @@ const orders = await prisma.order.findMany({
 ### Системные сообщения (ошибки, шаблоны SMS/email)
 
 Через `nestjs-i18n`:
+
 ```typescript
-throw new BadRequestException(
-  this.i18n.t('errors.insufficient_stock', { lang: 'ru' })
-);
+throw new BadRequestException(this.i18n.t('errors.insufficient_stock', { lang: 'ru' }));
 ```
 
 Файлы переводов: `apps/api/src/i18n/{ru,uz}/`.
@@ -485,6 +506,7 @@ CLICK_SECRET_KEY=...
 Secrets через **Vault** или **K8s Secrets** — никогда не в коде.
 
 В коде использовать `@nestjs/config`:
+
 ```typescript
 constructor(private configService: ConfigService) {
   const secret = this.configService.get<string>('JWT_SECRET');
@@ -498,6 +520,7 @@ constructor(private configService: ConfigService) {
 ### Добавление новой библиотеки
 
 Перед добавлением:
+
 1. Проверить, нет ли уже похожей в проекте
 2. Проверить активность на npm (downloads, last update)
 3. Проверить уязвимости: `pnpm audit`
@@ -513,30 +536,37 @@ constructor(private configService: ConfigService) {
 ## ⚠️ Что НЕ делать (антипаттерны)
 
 ### 1. Прямой доступ к Prisma в Controllers
+
 ❌ Controller вызывает `this.prisma.user.findMany()`
 ✅ Controller → Service → Repository → Prisma
 
 ### 2. Бизнес-логика в Controllers
+
 ❌ Условия, расчёты, циклы в controllers
 ✅ Controllers — только парсинг request → вызов service → return response
 
 ### 3. Циклические зависимости между модулями
+
 ❌ `OrdersModule` импортирует `PaymentsModule`, который импортирует `OrdersModule`
 ✅ Через события (`EventEmitter`)
 
 ### 4. Хардкод URL-ов и значений
+
 ❌ `axios.get('https://api.click.uz/...')`
 ✅ `axios.get(this.configService.get('CLICK_API_URL'))`
 
 ### 5. Скрытые сайд-эффекты
+
 ❌ Метод `getOrder()` обновляет статус
 ✅ Метод `getOrder()` — чистый getter, обновление в `updateOrderStatus()`
 
 ### 6. Слишком большие методы
+
 ❌ Метод на 200 строк
 ✅ Разбить на private методы, каждый — 10-30 строк
 
 ### 7. Глобальные изменения без миграций
+
 ❌ Изменить тип колонки в `schema.prisma` без миграции
 ✅ `pnpm prisma migrate dev --name change_column_type`
 
@@ -547,6 +577,7 @@ constructor(private configService: ConfigService) {
 ### Server vs Client Components
 
 **По умолчанию — Server Component**. Client только когда нужно:
+
 - Хуки (`useState`, `useEffect`)
 - Браузерные API (`window`, `localStorage`)
 - Event handlers (`onClick`, `onChange`)
@@ -559,7 +590,7 @@ export default async function ProductsPage() {
 }
 
 // ✅ Client Component (только когда нужен)
-'use client';
+('use client');
 export function AddToCartButton({ productId }: Props) {
   const [loading, setLoading] = useState(false);
   // ...
@@ -589,7 +620,11 @@ const schema = z.object({
   password: z.string().min(8),
 });
 
-const { register, handleSubmit, formState: { errors } } = useForm({
+const {
+  register,
+  handleSubmit,
+  formState: { errors },
+} = useForm({
   resolver: zodResolver(schema),
 });
 ```
@@ -608,6 +643,7 @@ const { register, handleSubmit, formState: { errors } } = useForm({
 ### При сомнениях — спросить
 
 Не пиши код, если непонятно:
+
 - Что должно произойти при граничных случаях
 - Какие права нужны для endpoint
 - Что считать ошибкой / валидным состоянием
@@ -617,6 +653,7 @@ const { register, handleSubmit, formState: { errors } } = useForm({
 ### Структурированный ответ
 
 При выполнении задачи отчёт:
+
 ```
 ## Что сделано
 - ...
@@ -637,6 +674,7 @@ const { register, handleSubmit, formState: { errors } } = useForm({
 ### Если что-то выглядит подозрительно — сообщи
 
 Например:
+
 - "Замечу, что в требованиях написано X, но это противоречит существующей логике в Y. Уточни?"
 - "Здесь возможен race condition при одновременных заказах — добавить Redis lock?"
 - "Это поле не индексировано, при таблице >100k записей будет медленно. Создать индекс?"
