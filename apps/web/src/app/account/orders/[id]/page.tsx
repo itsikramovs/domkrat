@@ -1,21 +1,47 @@
 'use client';
 
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, MessageSquare, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
+import { ReturnDialog } from '@/components/return-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useOrder } from '@/lib/api/orders';
+import { apiFetch, ApiHttpError } from '@/lib/api-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { formatPrice, pickLocale } from '@/lib/utils';
 
 export default function OrderPage() {
   const params = useParams<{ id: string }>();
   const order = useOrder(params.id ?? null);
+  const qc = useQueryClient();
+  const [showReturn, setShowReturn] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   if (order.isLoading || !order.data) return <div className="text-muted-foreground">Загрузка…</div>;
   const o = order.data;
+
+  async function confirmReceipt() {
+    if (!o) return;
+    setConfirming(true);
+    try {
+      await apiFetch(`/orders/${o.id}/confirm-receipt`, { method: 'POST' });
+      toast.success('Спасибо! Заказ закрыт.');
+      void qc.invalidateQueries({ queryKey: ['order', o.id] });
+    } catch (error) {
+      toast.error(error instanceof ApiHttpError ? error.body.message : 'Ошибка');
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  const canConfirm = ['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(o.status);
+  const canReturn = ['SHIPPED', 'DELIVERED', 'COMPLETED'].includes(o.status);
+  const canReview = o.status === 'COMPLETED';
 
   return (
     <div className="space-y-6">
@@ -31,6 +57,33 @@ export default function OrderPage() {
           Оплата: {o.paymentStatus}
         </Badge>
       </div>
+
+      {canConfirm || canReturn ? (
+        <Card>
+          <CardContent className="p-6 flex flex-wrap items-center gap-3">
+            {canConfirm ? (
+              <Button onClick={confirmReceipt} disabled={confirming}>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                {confirming ? 'Подтверждаем…' : 'Подтвердить получение'}
+              </Button>
+            ) : null}
+            {canReturn ? (
+              <Button variant="outline" onClick={() => setShowReturn(true)}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Вернуть товар
+              </Button>
+            ) : null}
+            {canReview ? (
+              <Button asChild variant="ghost">
+                <Link href={`/p/${o.items[0]?.productSnapshot?.slug ?? ''}#reviews`}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Оставить отзыв
+                </Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardContent className="p-6 space-y-3">
@@ -78,14 +131,17 @@ export default function OrderPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardContent className="p-6 text-sm space-y-1">
-          <h2 className="font-semibold">Способ доставки</h2>
-          <div className="text-muted-foreground">{o.deliveryMethod}</div>
-          <h2 className="font-semibold mt-3">Оплата</h2>
-          <div className="text-muted-foreground">{o.paymentMethod}</div>
-        </CardContent>
-      </Card>
+      {showReturn ? (
+        <ReturnDialog
+          orderId={o.id}
+          items={o.items.map((i) => ({
+            id: i.id,
+            quantity: i.quantity,
+            productSnapshot: i.productSnapshot,
+          }))}
+          onClose={() => setShowReturn(false)}
+        />
+      ) : null}
     </div>
   );
 }

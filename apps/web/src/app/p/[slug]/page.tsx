@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { AddToCartButton } from '@/components/add-to-cart-button';
+import { ReviewsSection } from '@/components/reviews-section';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { fetchProductReviews } from '@/lib/api/reviews-server';
 import { serverApi } from '@/lib/api-client';
 import type { Product } from '@/lib/types';
 import { formatPrice, pickLocale } from '@/lib/utils';
@@ -24,17 +26,20 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function ProductPage({ params }: PageProps) {
-  const product = await serverApi()<Product & {
-    attributes?: Array<{ valueString: string | null; attribute: { name: { ru: string }; unit?: string | null } }>;
-    oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
-    compatibilities?: Array<{
-      carMake?: { name: string } | null;
-      carModel?: { name: string; make: { name: string } } | null;
-      carModification?: { name: string; generation: { name: string; model: { name: string; make: { name: string } } } } | null;
-      yearFrom?: number | null;
-      yearTo?: number | null;
-    }>;
-  }>(`/products/${params.slug}`).catch(() => null);
+  const [product, reviews] = await Promise.all([
+    serverApi()<Product & {
+      attributes?: Array<{ valueString: string | null; attribute: { name: { ru: string }; unit?: string | null } }>;
+      oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
+      compatibilities?: Array<{
+        carMake?: { name: string } | null;
+        carModel?: { name: string; make: { name: string } } | null;
+        carModification?: { name: string; generation: { name: string; model: { name: string; make: { name: string } } } } | null;
+        yearFrom?: number | null;
+        yearTo?: number | null;
+      }>;
+    }>(`/products/${params.slug}`).catch(() => null),
+    fetchProductReviews(params.slug),
+  ]);
 
   if (!product) notFound();
 
@@ -115,6 +120,13 @@ export default async function ProductPage({ params }: PageProps) {
           </CardContent>
         </Card>
       ) : null}
+
+      <ReviewsSection
+        productId={product.id}
+        productRating={product.rating}
+        reviewsCount={product.reviewsCount}
+        initialReviews={reviews}
+      />
     </div>
   );
 }

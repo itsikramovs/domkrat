@@ -1,6 +1,6 @@
 'use client';
 
-import { Package, User } from 'lucide-react';
+import { Package, RotateCcw, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -21,6 +21,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const links = [
     { href: '/account', label: 'Профиль', icon: User },
     { href: '/account/orders', label: 'Заказы', icon: Package },
+    { href: '/account/returns', label: 'Возвраты', icon: RotateCcw },
   ];
 
   return (
