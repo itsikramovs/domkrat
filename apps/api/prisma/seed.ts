@@ -205,14 +205,24 @@ async function seedUsers(passwordHash: string): Promise<void> {
         preferredLanguage: 'ru',
       },
     });
+    // Привязываем merchantId для ролей MERCHANT/MERCHANT_STAFF
+    const merchantIdForUser =
+      u.id === ID.user.merchant1Owner ? ID.merchant.type1 :
+      u.id === ID.user.merchant2Owner ? ID.merchant.type2 :
+      null;
+
     for (const role of u.roles) {
+      const isMerchantRole = role === UserRole.MERCHANT || role === UserRole.MERCHANT_STAFF;
+      const merchantId = isMerchantRole ? merchantIdForUser : null;
       // Compound unique включает nullable merchantId — в PostgreSQL NULL не считается
       // уникальным, потому используем findFirst + create вместо upsert.
       const existing = await prisma.userRoleAssignment.findFirst({
-        where: { userId: u.id, role, merchantId: null },
+        where: { userId: u.id, role, merchantId },
       });
       if (!existing) {
-        await prisma.userRoleAssignment.create({ data: { userId: u.id, role } });
+        await prisma.userRoleAssignment.create({
+          data: { userId: u.id, role, merchantId: merchantId ?? undefined },
+        });
       }
     }
   }

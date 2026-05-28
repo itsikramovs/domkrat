@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { UsersModule } from './modules/users/users.module';
@@ -31,6 +32,7 @@ import { UsersModule } from './modules/users/users.module';
     NotificationsModule,
     AuthModule,
     UsersModule,
+    CatalogModule,
     HealthModule,
   ],
 })
