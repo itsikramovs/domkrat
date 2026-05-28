@@ -10,9 +10,27 @@ import { SiteHeader } from '@/components/site-header';
 
 import './globals.css';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://192.168.1.8:3000';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { default: 'Домкрат — маркетплейс автотоваров', template: '%s · Домкрат' },
   description: 'Запчасти и автотовары для Узбекистана: оригиналы и аналоги, доставка по Ташкенту.',
+  openGraph: {
+    type: 'website',
+    siteName: 'Домкрат',
+    locale: 'ru_RU',
+    alternateLocale: ['uz_UZ'],
+    images: [{ url: '/icons/icon-512.svg', width: 512, height: 512, alt: 'Домкрат' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Домкрат — маркетплейс автотоваров',
+    description: 'Запчасти и автотовары для Узбекистана.',
+  },
+  formatDetection: {
+    telephone: true,
+  },
 };
 
 export const viewport: Viewport = {

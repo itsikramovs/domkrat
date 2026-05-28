@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module';
@@ -54,6 +55,15 @@ async function bootstrap() {
   }
 
   app.setGlobalPrefix('api/v1');
+
+  // Безопасные HTTP-заголовки (XSS, MIME-sniffing, frame-injection и т.д.).
+  // CSP отключаем — у нас API + Swagger UI, политика отдельная для frontend.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
