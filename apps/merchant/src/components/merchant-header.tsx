@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Package, Store } from 'lucide-react';
+import { Boxes, LogOut, Package, Store } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ export function MerchantHeader() {
 
   const nav = [
     { href: '/dashboard', label: 'Дашборд', icon: Store },
+    { href: '/products', label: 'Товары', icon: Boxes },
     { href: '/orders', label: 'Заказы', icon: Package },
   ];
 
