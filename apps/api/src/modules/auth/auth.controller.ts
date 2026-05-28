@@ -12,9 +12,11 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 
 // Жёсткие лимиты по IP для критичных auth-операций — защита от брутфорса и massbot-регистраций.
-// Глобальный лимит 60/min остаётся для всего остального.
-const STRICT = { default: { limit: 5, ttl: 60_000 } };
-const MODERATE = { default: { limit: 10, ttl: 60_000 } };
+// Глобальный лимит 60/min остаётся для всего остального. В тестах поднимаем чтобы supertest-серии
+// не упирались в rate limit.
+const isTest = process.env.NODE_ENV === 'test';
+const STRICT = { default: { limit: isTest ? 10_000 : 5, ttl: 60_000 } };
+const MODERATE = { default: { limit: isTest ? 10_000 : 10, ttl: 60_000 } };
 
 @ApiTags('Auth')
 @Controller('auth')

@@ -17,6 +17,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HealthModule } from './modules/health/health.module';
+import { MerchantAnalyticsModule } from './modules/merchant-analytics/merchant-analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { ReturnsModule } from './modules/returns/returns.module';
@@ -35,7 +36,14 @@ import { UsersModule } from './modules/users/users.module';
     EventEmitterModule.forRoot({ ignoreErrors: false }),
     ScheduleModule.forRoot(),
     // Глобальный default — 60 req/min с одного IP. Точечные лимиты на auth — через @Throttle().
-    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
+    // В test-окружении лимит поднят чтобы supertest-серии не падали на rate limit.
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: process.env.NODE_ENV === 'test' ? 10_000 : 60,
+      },
+    ]),
     LoggerModule.forRoot({
       pinoHttp: {
         transport:
@@ -63,6 +71,7 @@ import { UsersModule } from './modules/users/users.module';
     ReturnsModule,
     ReviewsModule,
     FinanceModule,
+    MerchantAnalyticsModule,
     AdminModule,
     HealthModule,
   ],
