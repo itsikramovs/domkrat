@@ -10,14 +10,19 @@
 
 ✅ **Расширение админки + промокоды (2026-05-29, задеплоено)** — пользователь просил «не вижу 13 разделов». Добавлено и живёт в проде (api+admin пересобраны, `systemctl --user restart`):
 
-- **Промокоды (бэкенд монетизации)** `41fb9cc`: `PromoCodesService` (admin CRUD + `evaluate` + атомарный `recordUsage` race-safe), интеграция в cart (`/cart/promo`) и orders (скидку финансирует платформа — payout мерчанта на gross). **UI промокодов и комиссий ещё нет.**
-- **Характеристики** `f796efd`: `AttributesService` + `admin/attribute-groups` + `admin/attributes` (ENUM/MULTI_ENUM опции, guard на удаление используемых), страница `/attributes`.
-- **Системные пользователи (staff)** `55536fa`: `admin/staff` (list/create/setRoles), создание+смена ролей только SUPER_ADMIN, STAFF_ROLES allowlist; страница `/staff` (super-admin-gated).
-- **Клиенты** `fa699b0`: `admin/customers` (список с агрегатами заказов: кол-во + потрачено, детальная карточка с адресами/заказами), страница `/customers`.
-- **Тесты**: 76 unit зелёные (+ promo 29, attributes 7, staff 5, customers 3). Smoke-тест через туннель пройден.
-- **DNS на сервере починен**: в `/etc/systemd/resolved.conf` прописан `DNS=8.8.8.8 1.1.1.1`; `github.com` резолвится, git push/исходящие работают.
+- **Промокоды (бэкенд)** `41fb9cc`: `PromoCodesService` (admin CRUD + `evaluate` + атомарный `recordUsage` race-safe), интеграция в cart (`/cart/promo`) и orders (скидку финансирует платформа — payout мерчанта на gross).
+- **Характеристики** `f796efd`: `AttributesService` + `admin/attribute-groups`/`admin/attributes` (ENUM/MULTI_ENUM опции, guard на удаление используемых), страница `/attributes`.
+- **Системные пользователи (staff)** `55536fa`: `admin/staff` (list/create/setRoles), создание+смена ролей только SUPER_ADMIN; страница `/staff` (super-admin-gated).
+- **Клиенты** `fa699b0`: `admin/customers` (агрегаты заказов: кол-во + потрачено, карточка с адресами/заказами), страница `/customers`.
+- **Баннеры** `cd01e0e`: `admin/banners` CRUD + presign-загрузка картинок в MinIO (`banner/*` добавлен в публичную политику bucket'а), страница `/banners` с загрузкой desktop/mobile.
+- **Аналитика платформы** `2fddb12`: `GET /admin/analytics?range=N` (GMV/комиссия/выплаты, заказы по статусам, дневной ряд, топ-мерчанты/категории, новые клиенты), страница `/analytics` (CSS-графики, без recharts).
+- **Монетизация UI** `43a2d50`: страница `/monetization` (табы Промокоды CRUD + Комиссии мерчантов — `PATCH /admin/merchants/:id/commission` меняет `merchant.commissionRate`, реально применяемую в расчёте) + поле промокода в checkout web (`/cart`).
+- **Тесты**: 83 unit зелёные. Smoke через туннель пройден (промокоды/аналитика/комиссия). api+admin+web пересобраны и перезапущены.
+- **DNS на сервере починен**: `/etc/systemd/resolved.conf` → `DNS=8.8.8.8 1.1.1.1`.
 
-**Ещё не сделано из списка 13** (по приоритету пользователя): баннеры (admin CRUD), аналитика платформы, UI монетизации (промокоды+комиссии), «полноценное управление товарами» + действия по заказам (задача #8 — нужно решение по объёму: admin правит товары мерчантов? admin переопределяет state machine?).
+⚠️ **`git push` заблокирован авто-режимом** (прямой push в `master`). Коммиты `41fb9cc..43a2d50` лежат локально — нужен ручной `git push origin master` (или разрешение в settings).
+
+**Осталось из списка 13**: «полноценное управление товарами» (#1) + действия по заказам (#10) — задача #8, нужно решение по объёму: admin правит товары мерчантов (vs богатая модерация)? admin переопределяет state machine заказов (vs детальный просмотр)? Модель `CommissionRule` (rules-engine по категориям/типам) в БД есть, но НЕ подключена к расчёту — комиссия берётся из `merchant.commissionRate`.
 
 **Сайт развёрнут и живёт на `domcrat.uz` через Cloudflare Tunnel, запущен под user-systemd с авто-рестартом и автозапуском при ребуте** (проверено 2026-05-29, все хосты HTTP 200 по HTTPS).
 
