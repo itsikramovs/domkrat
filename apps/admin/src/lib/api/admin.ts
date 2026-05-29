@@ -160,6 +160,78 @@ export function useAdminOrders(filter: { status?: string; search?: string } = {}
   });
 }
 
+export interface AdminOrderDetail extends AdminOrder {
+  subtotal: string;
+  vatAmount: string;
+  deliveryCost: string;
+  discountAmount: string;
+  paymentMethod: string;
+  deliveryMethod: string;
+  customerNotes: string | null;
+  cancellationReason: string | null;
+  deliveryAddressSnapshot: Record<string, unknown> | null;
+  user: {
+    id: string;
+    email: string | null;
+    phone: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  };
+  items: Array<{
+    id: string;
+    quantity: number;
+    unitPrice: string;
+    subtotal: string;
+    productSnapshot: { name?: { ru?: string }; sku?: string };
+    product: { name: { ru: string }; slug: string } | null;
+  }>;
+  subOrders: Array<{
+    id: string;
+    subOrderNumber: string;
+    status: string;
+    subtotal: string;
+    merchantPayout: string;
+    commissionAmount: string;
+    merchant: { brandName: string; slug: string };
+  }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    status: string;
+    provider: string;
+    createdAt: string;
+  }>;
+  statusHistory: Array<{
+    id: string | number;
+    fromStatus: string;
+    toStatus: string;
+    reason: string | null;
+    changedByRole: string | null;
+    createdAt: string;
+  }>;
+}
+
+export function useAdminOrder(id: string | null) {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery<AdminOrderDetail>({
+    queryKey: ['admin-order', id, t],
+    queryFn: () => apiFetch(`/admin/orders/${id}`),
+    enabled: Boolean(t && id),
+  });
+}
+
+export function useUpdateOrderStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ status, reason }: { status: string; reason?: string }) =>
+      apiFetch(`/admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-order', id] });
+      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
+    },
+  });
+}
+
 export function useAdminWithdrawals(status?: string) {
   const t = useAuthStore((s) => s.accessToken);
   return useQuery<Paginated<AdminWithdrawal>>({

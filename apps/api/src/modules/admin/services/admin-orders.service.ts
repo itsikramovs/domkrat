@@ -1,7 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+
+/** Статусы, которые администратор может выставлять вручную (override проблемных заказов). */
+const ADMIN_SETTABLE: OrderStatus[] = [
+  OrderStatus.PAID,
+  OrderStatus.PROCESSING,
+  OrderStatus.ASSEMBLED,
+  OrderStatus.SHIPPED,
+  OrderStatus.DELIVERED,
+  OrderStatus.COMPLETED,
+  OrderStatus.CANCELLED,
+];
 
 @Injectable()
 export class AdminOrdersService {
@@ -28,9 +39,14 @@ export class AdminOrdersService {
         include: {
           user: { select: { email: true, phone: true } },
           subOrders: {
-            select: { id: true, merchantId: true, status: true, subtotal: true },
-            include: { merchant: { select: { brandName: true } } } as never,
-          } as never,
+            select: {
+              id: true,
+              merchantId: true,
+              status: true,
+              subtotal: true,
+              merchant: { select: { brandName: true } },
+            },
+          },
           _count: { select: { items: true } },
         },
         skip: (page - 1) * perPage,
@@ -54,5 +70,59 @@ export class AdminOrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  /**
+   * Ручное изменение статуса заказа администратором (override). Пишет запись в
+   * историю статусов с указанием, кто и почему сменил. Для CANCELLED обязательна причина.
+   */
+  async updateStatus(
+    id: string,
+    status: OrderStatus,
+    reason: string | undefined,
+    actor: { id: string; role: string },
+  ) {
+    if (!ADMIN_SETTABLE.includes(status)) {
+      throw new BadRequestException(`Статус ${status} недоступен для ручной установки`);
+    }
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status === status) {
+      throw new BadRequestException('Заказ уже в этом статусе');
+    }
+    if (status === OrderStatus.CANCELLED && !reason?.trim()) {
+      throw new BadRequestException('Для отмены укажите причину');
+    }
+
+    const now = new Date();
+    const data: Prisma.OrderUpdateInput = { status };
+    if (status === OrderStatus.PAID) data.paidAt = now;
+    if (status === OrderStatus.PROCESSING) data.confirmedAt = now;
+    if (status === OrderStatus.SHIPPED) data.shippedAt = now;
+    if (status === OrderStatus.DELIVERED) data.deliveredAt = now;
+    if (status === OrderStatus.COMPLETED) data.completedAt = now;
+    if (status === OrderStatus.CANCELLED) {
+      data.cancelledAt = now;
+      data.cancellationReason = reason;
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({ where: { id }, data });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: id,
+          fromStatus: order.status,
+          toStatus: status,
+          changedById: actor.id,
+          changedByRole: actor.role,
+          reason: reason?.trim() || null,
+          metadata: { source: 'admin-override' } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return updated;
+    });
   }
 }

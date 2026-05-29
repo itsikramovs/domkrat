@@ -27,6 +27,7 @@ import { HoldReleaseService } from '../finance/hold-release.service';
 
 import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { CreateStaffDto, SetStaffRolesDto } from './dto/create-staff.dto';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminCustomersService } from './services/admin-customers.service';
 import { AdminFinanceService } from './services/admin-finance.service';
@@ -274,6 +275,18 @@ export class AdminController {
   @ApiOperation({ summary: 'Детали заказа' })
   getOrder(@Param('id', ParseUUIDPipe) id: string) {
     return this.orders.get(id);
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.SUPPORT_AGENT)
+  @Patch('orders/:id/status')
+  @ApiOperation({ summary: 'Сменить статус заказа (override администратором)' })
+  updateOrderStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateOrderStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const role = user.roles?.[0] ?? UserRole.ADMIN;
+    return this.orders.updateStatus(id, body.status, body.reason, { id: user.id, role });
   }
 
   // ============================================================ Finance
