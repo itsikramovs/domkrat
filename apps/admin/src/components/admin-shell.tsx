@@ -227,9 +227,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen bg-muted/40">
+    <div className="flex min-h-screen">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-800/60 bg-slate-950 lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-slate-950/35 backdrop-blur-xl lg:flex">
         {sidebarInner}
       </aside>
 
@@ -240,7 +240,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col bg-slate-950">
+          <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-white/10 bg-slate-950/90 backdrop-blur-xl">
             <button
               onClick={() => setOpen(false)}
               className="absolute right-3 top-5 text-slate-400 hover:text-white"
@@ -254,7 +254,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/70 bg-background/80 px-4 backdrop-blur-md md:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/10 bg-white/5 px-4 backdrop-blur-xl md:px-6">
           <button
             className="grid h-9 w-9 place-items-center rounded-lg hover:bg-accent lg:hidden"
             onClick={() => setOpen(true)}

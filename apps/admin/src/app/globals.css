@@ -4,32 +4,33 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* Dark "glass on gradient" theme (Dashtreme-style) */
+    --background: 215 40% 13%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card: 215 38% 16%;
+    --card-foreground: 210 40% 98%;
 
     --primary: 24 95% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 215 28% 26%;
+    --secondary-foreground: 210 40% 96%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 215 28% 22%;
+    --muted-foreground: 213 25% 74%;
 
-    --accent: 24 95% 95%;
-    --accent-foreground: 24 95% 33%;
+    --accent: 215 28% 30%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 80% 62%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
+    --border: 213 22% 32%;
+    --input: 215 28% 24%;
     --ring: 24 95% 53%;
 
-    --radius: 0.75rem;
+    --radius: 0.85rem;
   }
 
   html,
@@ -38,7 +39,13 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
+    min-height: 100vh;
+    background:
+      radial-gradient(1100px 560px at 0% 0%, hsl(190 58% 24% / 0.95) 0%, transparent 55%),
+      radial-gradient(1200px 680px at 100% 28%, hsl(266 52% 33% / 0.92) 0%, transparent 58%),
+      linear-gradient(135deg, #0b2733 0%, #163566 48%, #33276c 100%);
+    background-attachment: fixed;
     font-family:
       system-ui,
       -apple-system,
@@ -53,7 +60,20 @@
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.18);
+    background: hsl(var(--primary) / 0.28);
+  }
+
+  /* Glassmorphic scrollbars for the dark theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 100% / 0.14);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(0 0% 100% / 0.22);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -64,5 +84,21 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer components {
+  /* Frosted glass surface used by cards/panels */
+  .glass {
+    background: hsl(0 0% 100% / 0.07);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(0 0% 100% / 0.1);
+  }
+  .glass-strong {
+    background: hsl(215 45% 12% / 0.55);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid hsl(0 0% 100% / 0.08);
   }
 }
