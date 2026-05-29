@@ -30,6 +30,15 @@
 
 ✅ **Фикс «F5 разлогинивает»** (`fix(auth)` `ff4e84e`): сторы и так persist'ились в localStorage, но гарды проверяли `accessToken === null` на первом рендере (до регидрации zustand) и редиректили на /login. Добавил флаг `hasHydrated` (через `onRehydrateStorage`, `partialize` только токены+user) во ВСЕ 3 стора; гарды теперь ждут регидрацию (редирект только при `hasHydrated && !accessToken`). Поправлены гарды: admin AuthGate, merchant dashboard/orders/products layouts, web account/checkout/cart. Проверено Playwright: login→F5 остаётся залогинен (admin/merchant/web); разлогиненный → редирект на /login (регрессия ок).
 
+🏗️ **Складской учёт / WMS — фаза 1 backend готова** (`feat(inventory)` `6d1ae8e`). Контекст: вся складская подсистема (Warehouse→Zone→Rack→Shelf→Cell, StockReceipt/Movement/Balance/Reservation/Alert) была **спроектирована в БД и docs §3.1, но НЕ реализована** (только резерв при заказе) — отсюда ощущение «простого магазина». Сделано в фазе 1 (модуль `apps/api/src/modules/inventory/`):
+
+- Склады + иерархия CRUD (merchant — свои, admin — платформенные `/admin/warehouses`).
+- **Приходование** (state-machine по §3.1): DRAFT→EXPECTED→ARRIVED→QC(PASSED/PARTIAL/FAILED)→PLACING→размещение по ячейкам→COMPLETED. Пишет `StockMovement(RECEIPT)` + `InventoryBalance` по ячейке **и** агрегат `cellId=null` (его списывает чекаут — товар становится продаваемым). Проверено live + 6 unit-тестов.
+- Остатки (агрегат/по ячейкам), движения, summary. Эндпоинты `/merchant/{warehouses,receipts,inventory}`, `/admin/warehouses`.
+- Seed создаёт платформенный склад `TASH-MAIN`.
+
+**Осталось по WMS (следующие фазы):** (2) **фронт** — разделы «Склады/Приёмки/Остатки» в кабинете мерчанта + «Склады» в админке (наполнит «скудную» админку); (3) cron-алерты залежавшегося товара/low-stock, QR-сканирование, аренда ячеек, трансферы между ячейками, admin-обзор приёмок.
+
 **Остаётся ручное / по решению пользователя:**
 
 1. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить**. Включается по команде (токен с `Access:Edit` есть).
