@@ -44,14 +44,17 @@ export class ProductsService {
   // PUBLIC
   // -------------------------------------------------------------------------
 
-  async listPublic(query: ListProductsDto) {
+  async listPublic(query: ListProductsDto, opts?: { adminMode?: boolean }) {
     const page = query.page ?? 1;
     const perPage = query.perPage ?? 20;
 
-    const where: Prisma.ProductWhereInput = {
-      deletedAt: null,
-      status: ProductStatus.ACTIVE,
-    };
+    const where: Prisma.ProductWhereInput = { deletedAt: null };
+    if (opts?.adminMode) {
+      // Админ-модерация: показываем любой статус, фильтр по query.status опционален.
+      if (query.status) where.status = query.status;
+    } else {
+      where.status = ProductStatus.ACTIVE;
+    }
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.categorySlug) where.category = { slug: query.categorySlug };
     if (query.brandId) where.brandId = query.brandId;
@@ -123,7 +126,9 @@ export class ProductsService {
           include: {
             carMake: true,
             carModel: { include: { make: true } },
-            carModification: { include: { generation: { include: { model: { include: { make: true } } } } } },
+            carModification: {
+              include: { generation: { include: { model: { include: { make: true } } } } },
+            },
           },
         },
       },
@@ -225,7 +230,8 @@ export class ProductsService {
           price: new Prisma.Decimal(dto.price),
           compareAtPrice:
             dto.compareAtPrice !== undefined ? new Prisma.Decimal(dto.compareAtPrice) : undefined,
-          vatRate: dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
+          vatRate:
+            dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
           status: dto.status ?? ProductStatus.PENDING_REVIEW,
         },
         include: PRODUCT_INCLUDE,
@@ -286,7 +292,10 @@ export class ProductsService {
     }
     const updated = await this.prisma.product.update({
       where: { id },
-      data: { status: dto.status, publishedAt: dto.status === ProductStatus.ACTIVE ? new Date() : undefined },
+      data: {
+        status: dto.status,
+        publishedAt: dto.status === ProductStatus.ACTIVE ? new Date() : undefined,
+      },
     });
     if (dto.status === ProductStatus.ACTIVE) this.emitIndexed(id);
     else this.emitRemoved(id);
@@ -320,14 +329,20 @@ export class ProductsService {
   async addCompatibility(merchantId: string, productId: string, dto: CreateCompatibilityDto) {
     await this.ensureOwnership(merchantId, productId);
     if (!dto.carModificationId && !dto.carModelId && !dto.carMakeId) {
-      throw new BadRequestException('At least one of car_modification_id / car_model_id / car_make_id required');
+      throw new BadRequestException(
+        'At least one of car_modification_id / car_model_id / car_make_id required',
+      );
     }
     return this.prisma.productCompatibility.create({
       data: { productId, ...dto },
     });
   }
 
-  async removeCompatibility(merchantId: string, productId: string, compatId: string): Promise<void> {
+  async removeCompatibility(
+    merchantId: string,
+    productId: string,
+    compatId: string,
+  ): Promise<void> {
     await this.ensureOwnership(merchantId, productId);
     const compat = await this.prisma.productCompatibility.findUnique({ where: { id: compatId } });
     if (!compat || compat.productId !== productId) {
@@ -341,7 +356,7 @@ export class ProductsService {
   // -------------------------------------------------------------------------
 
   listAll(query: ListProductsDto) {
-    return this.listPublic({ ...query }); // та же выборка но позже можно убрать status filter
+    return this.listPublic({ ...query }, { adminMode: true });
   }
 
   async moderate(id: string, dto: ModerateProductDto) {
@@ -512,10 +527,39 @@ export class ProductsService {
       .toLowerCase()
       .replace(/[а-я]/g, (c) => {
         const map: Record<string, string> = {
-          а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z',
-          и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r',
-          с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch',
-          ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+          а: 'a',
+          б: 'b',
+          в: 'v',
+          г: 'g',
+          д: 'd',
+          е: 'e',
+          ё: 'yo',
+          ж: 'zh',
+          з: 'z',
+          и: 'i',
+          й: 'y',
+          к: 'k',
+          л: 'l',
+          м: 'm',
+          н: 'n',
+          о: 'o',
+          п: 'p',
+          р: 'r',
+          с: 's',
+          т: 't',
+          у: 'u',
+          ф: 'f',
+          х: 'h',
+          ц: 'ts',
+          ч: 'ch',
+          ш: 'sh',
+          щ: 'sch',
+          ъ: '',
+          ы: 'y',
+          ь: '',
+          э: 'e',
+          ю: 'yu',
+          я: 'ya',
         };
         return map[c] ?? c;
       })

@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ProductStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
@@ -40,6 +41,11 @@ export class ListProductsDto {
   @IsOptional()
   @IsUUID()
   merchantId?: string;
+
+  @ApiPropertyOptional({ enum: ProductStatus, description: 'Только для админ-модерации' })
+  @IsOptional()
+  @IsEnum(ProductStatus)
+  status?: ProductStatus;
 
   @ApiPropertyOptional()
   @IsOptional()

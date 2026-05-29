@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
 
-import { AdminHeader } from '@/components/admin-header';
+import { AdminShell } from '@/components/admin-shell';
 import { QueryProvider } from '@/lib/query-provider';
 
 import './globals.css';
@@ -16,8 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru">
       <body className="min-h-screen bg-background">
         <QueryProvider>
-          <AdminHeader />
-          <main>{children}</main>
+          <AdminShell>{children}</AdminShell>
         </QueryProvider>
         <Toaster richColors position="top-right" />
       </body>
