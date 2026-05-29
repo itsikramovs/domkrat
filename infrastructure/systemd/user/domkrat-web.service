@@ -1,0 +1,18 @@
+[Unit]
+Description=Domkrat Web (Next.js customer)
+After=network-online.target domkrat-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+WorkingDirectory=/var/www/domkrat/apps/web
+# next start сам читает apps/web/.env.production (INTERNAL_API_URL) при NODE_ENV=production.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+SyslogIdentifier=domkrat-web
+LimitNOFILE=65535
+
+[Install]
+WantedBy=default.target

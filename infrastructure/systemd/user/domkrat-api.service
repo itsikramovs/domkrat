@@ -1,0 +1,17 @@
+[Unit]
+Description=Domkrat API (NestJS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/domkrat/apps/api
+# Node 20 --env-file = dotenv-совместимый парсинг (NODE_ENV/DATABASE_URL/JWT_SECRET/...).
+ExecStart=/usr/bin/node --env-file=/var/www/domkrat/apps/api/.env.production dist/main.js
+Restart=always
+RestartSec=5
+SyslogIdentifier=domkrat-api
+LimitNOFILE=65535
+
+[Install]
+WantedBy=default.target

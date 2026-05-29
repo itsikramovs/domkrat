@@ -1,0 +1,17 @@
+[Unit]
+Description=Domkrat Admin panel (Next.js)
+After=network-online.target domkrat-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+WorkingDirectory=/var/www/domkrat/apps/admin
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3003
+Restart=always
+RestartSec=5
+SyslogIdentifier=domkrat-admin
+LimitNOFILE=65535
+
+[Install]
+WantedBy=default.target

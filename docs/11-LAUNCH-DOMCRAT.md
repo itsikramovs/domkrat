@@ -119,17 +119,47 @@ SUPER_ADMIN_PASSWORD="$(openssl rand -base64 24)" \
 
 ## 6. systemd
 
+### 6a. user-systemd — ТЕКУЩИЙ способ (без sudo) ✅ ПРИМЕНЁН
+
+На этом сервере `sudo` под паролем, поэтому сервисы (включая cloudflared) запущены
+как **user-services** под `samandar`. Даёт авто-рестарт при падении + автозапуск при
+ребуте (через linger), без root. Юниты — в `infrastructure/systemd/user/` (+ README).
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp infrastructure/systemd/user/domkrat-*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now \
+  domkrat-api domkrat-web domkrat-merchant domkrat-admin domkrat-cloudflared
+loginctl enable-linger samandar      # переживать ребут (на этом сервере проходит без sudo)
+
+# проверка
+systemctl --user --no-legend list-units 'domkrat-*'
+curl -s http://127.0.0.1:3001/api/v1/health   # → {"status":"ok"}
+journalctl --user -u domkrat-api -f
+```
+
+> ⚠️ cloudflared тоже под user-systemd (`domkrat-cloudflared`), поэтому раздел 7
+> ниже (ручной запуск туннеля / `cloudflared service install`) больше НЕ нужен —
+> туннель уже locally-managed (креды `~/.cloudflared/`, ingress `~/.cloudflared/config.yml`).
+
+### 6b. system-level systemd — когда появится sudo/root (альтернатива)
+
 ```bash
 sudo cp infrastructure/systemd/*.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now domkrat-api domkrat-web domkrat-merchant domkrat-admin
 sudo systemctl status domkrat-api
-# локальная проверка до туннеля:
-curl -s http://127.0.0.1:3001/api/v1/health   # → {"status":"ok"}
-curl -sI http://127.0.0.1:3000                 # → 200
 ```
 
-## 7. Cloudflare Tunnel (интерактивно: нужен браузер + sudo)
+Предпочтительно на выделенном сервере с root. Тогда `loginctl enable-linger` не нужен;
+cloudflared перенести на `sudo cloudflared service install`.
+
+## 7. Cloudflare Tunnel — УЖЕ НАСТРОЕНО (раздел оставлен для истории / выделенного сервера)
+
+> На текущем сервере туннель уже работает (locally-managed, под `domkrat-cloudflared`
+> в user-systemd, см. §6a). Шаги ниже нужны только при настройке с нуля на другом
+> сервере с sudo, либо для классической system-level установки.
 
 ```bash
 # установить cloudflared

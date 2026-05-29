@@ -8,17 +8,21 @@
 
 ## 0. ⚡ САМОЕ ВАЖНОЕ ДЛЯ СЛЕДУЮЩЕЙ СЕССИИ
 
-**Сайт УЖЕ развёрнут и живёт на `domcrat.uz` через Cloudflare Tunnel** (проверено 2026-05-29, все хосты HTTP 200 по HTTPS). НО запущено как **detached background-процессы (`setsid`), НЕ systemd** → переживёт выход из сессии, но **НЕ переживёт ребут сервера**.
+**Сайт развёрнут и живёт на `domcrat.uz` через Cloudflare Tunnel, запущен под user-systemd с авто-рестартом и автозапуском при ребуте** (проверено 2026-05-29, все хосты HTTP 200 по HTTPS).
 
-**Что сделать в первую очередь (требует `sudo` от пользователя):**
+✅ **Persistence СДЕЛАНА (без sudo):** 5 сервисов (`domkrat-api/web/merchant/admin/cloudflared`) переведены на **user-systemd** (`~/.config/systemd/user/`, копии в `infrastructure/systemd/user/`), `loginctl enable-linger samandar` → `Linger=yes`. Проверено: `Restart=always` реально поднимает убитый процесс; всё `enabled` на boot. Управление: `systemctl --user {status,restart} domkrat-*`, логи `journalctl --user -u domkrat-api`.
 
-1. Перевести 4 сервиса + cloudflared на **systemd** (persistence через ребут) — шаги в `docs/11-LAUNCH-DOMCRAT.md §6` + `infrastructure/systemd/`.
-2. Закрыть `admin.domcrat.uz` через **Cloudflare Access** (email allowlist).
-3. Отозвать временный Cloudflare API-токен (лежит `~/.config/cloudflare-api.token`, своё дело сделал).
+> ⚠️ 2026-05-29 сервер **ребутнулся** — это и уронило прежний `setsid`-запуск (docker-инфра вернулась сама, node+cloudflared нет). После перевода на user-systemd такой сбой больше не повторится.
 
-**Деплой-правки закоммичены** на `master` → `dc6b0ba` _chore(deploy): wire up domcrat.uz production deployment_ (code-fix `StorageService`, все `*.env.production.example`, systemd-юниты, cloudflared-конфиг, `.gitignore`, `docs/09`, новый `docs/11`). Секретов в трекинге нет. **Не запушено на remote** — `git push origin master` по готовности.
+**Остались задачи, требующие дашборда Cloudflare (НЕ автоматизируются текущим API-токеном, у него только `Zone→DNS:Edit`):**
 
-Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`**.
+1. Закрыть `admin.domcrat.uz` через **Cloudflare Access** (email allowlist) — только дашборд/токен с `Access:Edit`.
+2. Отозвать временный Cloudflare API-токен (`~/.config/cloudflare-api.token`) — он больше не нужен (DNS создан, туннель locally-managed). Делается в дашборде.
+3. (Опц.) `git push origin master` — коммиты пока локальные.
+
+**Закоммичено** на `master`: `dc6b0ba` (deploy wiring) + `e7c0666` (handoff sync) + коммит этой сессии (user-systemd units + docs). Секретов в трекинге нет. **Не запушено на remote.**
+
+Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`** (§6a — user-systemd).
 
 ---
 
@@ -47,7 +51,7 @@
   - бинарь: `~/.local/bin/cloudflared` (v2026.5.2, поставлен без sudo).
   - **Причина locally-managed**: выданный Cloudflare API-токен имеет только `Zone→DNS:Edit`, без `Account→Tunnel:Edit`, поэтому ingress через API прописать нельзя — обошёл локальным конфигом. **Следствие: вкладка Public Hostnames в дашборде Cloudflare ПУСТА — это норма, не добавлять туда хосты (конфликт с локальным конфигом).**
 - **DNS**: 6 проксируемых CNAME (`<host> → <uuid>.cfargotunnel.com`) созданы через Cloudflare API.
-- **Процессы** запущены через `setsid` (detached), логи в `/tmp/domkrat-logs/{api,web,merchant,admin,cloudflared}.log`. systemd — TODO (см. §0).
+- **Процессы** — под **user-systemd** (`systemctl --user`), 5 юнитов `domkrat-{api,web,merchant,admin,cloudflared}`, `enabled` + `Linger=yes` (автозапуск при ребуте) + `Restart=always`. Логи: `journalctl --user -u domkrat-<svc>`. Юниты в `infrastructure/systemd/user/`.
 - **Секреты на диске** (вне git, chmod 600): `~/.config/cloudflared.token` (connector), `~/.config/cloudflare-api.token` (API, отозвать после настройки), `apps/api/.env.production` + `apps/{web,merchant,admin}/.env.production[.local]`.
 - **super admin**: `super@domkrat.uz` / `Test1234!` (демо-seed — сменить перед боевым). БД засеяна полным `db:seed`: 100 товаров, 2 демо-мерчанта, справочники.
 
@@ -209,7 +213,7 @@
 - ⚠️ **Sudo требует пароль** — Claude не может ставить системные пакеты. Просить пользователя.
 - ⚠️ **Docker от группы docker** — `samandar` в группе, но claude может не иметь доступа к /var/run/docker.sock. Если `docker ps` падает с permission denied — попроси пользователя или используй `sudo docker` (с паролем).
 - ⚠️ **Туннель — locally-managed, конфиг локальный** (`~/.cloudflared/config.yml`), а НЕ в дашборде Cloudflare. Менять маршрутизацию/добавлять хосты — правкой этого файла + рестарт cloudflared, НЕ через дашборд (вкладка Public Hostnames пуста — это норма). Запуск: `~/.local/bin/cloudflared --no-autoupdate --config ~/.cloudflared/config.yml tunnel run <uuid>`.
-- ⚠️ **Сервисы запущены через `setsid` (не systemd)** — переживают выход из сессии, но НЕ ребут. Перезапуск отдельного сервиса = найти PID (`pgrep -af`), убить, заново `setsid … &` с env из `apps/<app>/.env.production`. Правильное решение — перевести на systemd (нужен sudo, см. `docs/11 §6`).
+- ⚠️ **Сервисы под user-systemd** (`systemctl --user`, НЕ system-level — sudo недоступен). Перезапуск: `systemctl --user restart domkrat-api`. Логи: `journalctl --user -u domkrat-api -f`. Юниты: `~/.config/systemd/user/domkrat-*.service` (копии в `infrastructure/systemd/user/`). `Linger=yes` → стартуют при ребуте. После `pnpm build` нужно `systemctl --user restart domkrat-*` (см. `infrastructure/systemd/user/README.md`).
 - ⚠️ **Env фронтов вшиваются на этапе `pnpm build`** (`NEXT_PUBLIC_*`). Лежат в `apps/{web,merchant,admin}/.env.production[.local]` с URL `domcrat.uz`. Сменишь домен/канонический URL — нужно **пересобрать** фронты, иначе в бандле останется старый адрес.
 
 ### Тесты
@@ -267,20 +271,13 @@ pnpm type-check                   # типы всех апп
 pnpm lint                         # eslint
 pnpm build                        # production build
 
-# Деплой (на сервере) — ПОСЛЕ перевода на systemd (нужен sudo, пока НЕ сделано)
-sudo systemctl restart domkrat-api domkrat-web domkrat-merchant domkrat-admin
-sudo journalctl -u domkrat-api -f
-
-# Текущий запуск (background / setsid — пока нет systemd)
-pgrep -af "cloudflared.*config.yml"           # жив ли туннель
-ps -eo pid,etime,cmd | grep -E "dist/main|next-server" | grep -v grep
-tail -f /tmp/domkrat-logs/cloudflared.log      # логи туннеля
-tail -f /tmp/domkrat-logs/api.log              # логи api (web/merchant/admin аналогично)
-curl -s https://api.domcrat.uz/api/v1/health   # проверка снаружи через Cloudflare
-
-# Перезапуск туннеля (если упал)
-~/.local/bin/cloudflared --no-autoupdate --config ~/.cloudflared/config.yml \
-  tunnel run 02bf83d1-d3e1-43dc-89d1-a6320fce7234 > /tmp/domkrat-logs/cloudflared.log 2>&1 &
+# Прод на этом сервере — user-systemd (БЕЗ sudo)
+systemctl --user --no-legend list-units 'domkrat-*'   # статус всех 5 сервисов
+systemctl --user restart domkrat-api                  # рестарт одного
+systemctl --user restart domkrat-{api,web,merchant,admin}  # после pnpm build
+journalctl --user -u domkrat-api -f                   # логи (web/merchant/admin/cloudflared аналогично)
+curl -s https://api.domcrat.uz/api/v1/health          # проверка снаружи через Cloudflare
+loginctl show-user samandar | grep Linger             # Linger=yes → переживает ребут
 ```
 
 ---

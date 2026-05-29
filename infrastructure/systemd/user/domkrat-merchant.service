@@ -1,0 +1,17 @@
+[Unit]
+Description=Domkrat Merchant cabinet (Next.js)
+After=network-online.target domkrat-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=NODE_ENV=production
+WorkingDirectory=/var/www/domkrat/apps/merchant
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3002
+Restart=always
+RestartSec=5
+SyslogIdentifier=domkrat-merchant
+LimitNOFILE=65535
+
+[Install]
+WantedBy=default.target

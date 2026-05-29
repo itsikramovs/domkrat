@@ -1,0 +1,14 @@
+[Unit]
+Description=Domkrat Cloudflare Tunnel (locally-managed)
+After=network-online.target domkrat-api.service domkrat-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/samandar/.local/bin/cloudflared --no-autoupdate --config /home/samandar/.cloudflared/config.yml tunnel run 02bf83d1-d3e1-43dc-89d1-a6320fce7234
+Restart=always
+RestartSec=5
+SyslogIdentifier=domkrat-cloudflared
+
+[Install]
+WantedBy=default.target
