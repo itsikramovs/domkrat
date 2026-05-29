@@ -28,7 +28,7 @@
 
 ✅ **Редизайн merchant/admin + фикс админки** (`feat(panels)` `338ffc9`): тот же modern-стиль (amber-бренд для бэк-офиса). **Важно**: нашёл и починил критический баг — admin root layout НЕ оборачивал `QueryProvider` и не рендерил `AdminHeader`, поэтому ВСЕ data-страницы админки падали с `No QueryClient set` (фронт админки был «каркас», ни разу не запускался в браузере). Теперь admin (dashboard/merchants/orders/finance) работает. Проверено Playwright (desktop+mobile): overflow нет, навигация + форма «Создать мерчанта» + графики мерчанта работают, 0 ошибок.
 
-> ⚠️ Найденный отдельный UX-баг (НЕ чинил — вне задачи): токен авторизации в merchant/admin хранится только в памяти (zustand без persist) → **обновление страницы (F5) разлогинивает**. SPA-навигация работает. Стоит добавить persist в `apps/{merchant,admin}/src/lib/auth-store.ts`.
+✅ **Фикс «F5 разлогинивает»** (`fix(auth)` `ff4e84e`): сторы и так persist'ились в localStorage, но гарды проверяли `accessToken === null` на первом рендере (до регидрации zustand) и редиректили на /login. Добавил флаг `hasHydrated` (через `onRehydrateStorage`, `partialize` только токены+user) во ВСЕ 3 стора; гарды теперь ждут регидрацию (редирект только при `hasHydrated && !accessToken`). Поправлены гарды: admin AuthGate, merchant dashboard/orders/products layouts, web account/checkout/cart. Проверено Playwright: login→F5 остаётся залогинен (admin/merchant/web); разлогиненный → редирект на /login (регрессия ок).
 
 **Остаётся ручное / по решению пользователя:**
 
