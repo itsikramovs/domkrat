@@ -104,13 +104,13 @@
 
 ### Метрики
 
-- **34 коммита** в master (главная ветка: `master`, не `main` — расхождение с git config!)
-- **273 .ts/.tsx файлов**
-- **81 тест** (38 unit + 43 E2E) — все зелёные
-- **16 NestJS модулей**, **~30 страниц web**, **9 страниц merchant**, **20+ admin**
+- **65 коммитов** в master (главная ветка: `master`, не `main` — расхождение с git config!). ⚠️ Последние 9 (`41fb9cc..7cf183f`) НЕ запушены — `git push` блокируется авто-режимом, нужен ручной `git push origin master`.
+- **~470 .ts/.tsx файлов**
+- **126 тестов** (83 unit + 43 E2E) — все зелёные
+- **19 NestJS модулей**, **26 страниц web**, **9 страниц merchant**, **21 страница admin**
 - **~80 моделей** в Prisma schema
 - **104 продукта** в seed (10 категорий × 10-13 шт)
-- **130+ REST endpoints**
+- **150+ REST endpoints**
 
 ---
 
@@ -129,6 +129,11 @@
 - ✅ Returns, Reviews, Banners, Notifications (feed + badge)
 - ✅ Uploads: MinIO presigned URLs, public read для product/\*
 - ✅ Merchant Analytics: `/merchant/analytics/summary?range=N` (Recharts на dashboard)
+- ✅ Promo codes: `PromoCodesService` (admin `admin/promo-codes` CRUD + `evaluate` + race-safe `recordUsage`), cart `POST/DELETE /cart/promo`, применяется в `OrdersService` (скидку финансирует платформа)
+- ✅ Attributes: `admin/attribute-groups`, `admin/attributes` (модели Attribute/AttributeGroup)
+- ✅ Banners admin: `admin/banners` CRUD + `POST /uploads/presign-banner-image` (MinIO `banner/*`)
+- ✅ Platform analytics: `GET /admin/analytics?range=N` (AdminAnalyticsService)
+- ✅ Staff/customers: `admin/staff` (list/create/setRoles), `admin/customers` (агрегаты заказов), `PATCH /admin/merchants/:id/commission`
 - ✅ Throttler: 60/min globally, 5/min на auth (login/register/password-reset)
 - ✅ Helmet (security headers), Sentry no-op без DSN
 
@@ -154,15 +159,26 @@
 - ✅ Products: список, создание, редактирование с ImagesManager + CompatibilityManager
 - ✅ Orders: confirm → ready → ship flow
 
-### Admin (apps/admin)
+### Admin (apps/admin) — 21 страница, AdminShell с sidebar
 
-- ✅ Users, Merchants, Orders, Finance (withdrawals approve/reject)
-- ✅ Backend admin API полный, frontend — каркас
+Группы сайдбара и разделы (`apps/admin/src/components/admin-shell.tsx`):
 
-### Tests (81 шт)
+- **Обзор**: Дашборд (фин. сводка), **Аналитика** (`/analytics` — GMV/комиссия/заказы/топ-мерчанты/категории, CSS-графики)
+- **Каталог**: Модерация товаров, Категории (CRUD), Бренды (CRUD), **Характеристики** (`/attributes` — группы + атрибуты, ENUM-опции)
+- **Продажи**: Заказы (просмотр + фильтр), Возвраты (модерация), Отзывы (модерация)
+- **Партнёры**: Мерчанты (+ создание), **Клиенты** (`/customers` — агрегаты + карточка), Пользователи (блок/актив)
+- **Маркетинг**: **Баннеры** (`/banners` — CRUD + загрузка картинок), **Монетизация** (`/monetization` — промокоды CRUD + ставки комиссии)
+- **Склад**: Склады (платформенные)
+- **Финансы**: Сводка, Выводы средств
+- **Система**: **Сотрудники** (`/staff` — staff + роли, super-admin), Настройки (rebuild search / hold-release / скан остатков)
 
-- **Unit (38)**: PricingService (14), PasswordService (4), AuthService (14), OrdersService (6)
+Все data-страницы под `AuthGate` + TanStack Query. **Frontend больше НЕ каркас** — все разделы работают на реальных endpoint'ах.
+
+### Tests (126 шт)
+
+- **Unit (83)**: PricingService (14), AuthService (14), PasswordService (4), OrdersService (6), PromoCodesService (15) + pricing-promo (14 в pricing), AttributesService (7), AdminUsersService/staff (5), AdminCustomersService (3), AdminAnalyticsService (2), BannersService (3), AdminMerchantsService create+commission, receipts (6)
 - **E2E (43)**: orders-flow (10), catalog (17), cart-edge (7), merchant-flow (8) + general
+- _Новые admin-разделы покрыты unit-тестами сервисов; e2e на них пока нет._
 
 ### Production setup
 
@@ -190,17 +206,20 @@
 
 ### 🟡 Желательно до запуска
 
-6. **Промокоды end-to-end** — БД готова, нужны: admin CRUD UI + интеграция в `PricingService` + checkout UI
+6. ~~**Промокоды end-to-end**~~ ✅ СДЕЛАНО (бэкенд + admin CRUD `/monetization` + checkout-поле). Интегрировано в cart/orders, скидку финансирует платформа.
 7. **Backup cron** для Postgres + проверка восстановления
-8. **Реальная аналитика выручки на тестовых заказах** — сейчас в seed нет завершённых заказов, графики мерчанта пустые
+8. **Реальная аналитика выручки на тестовых заказах** — в seed есть 14 заказов (GMV ~3.3M), но мало «завершённых»; для полноты графиков нужны seed-данные с DELIVERED/COMPLETED за разные дни
 9. **Sentry DSN** в `.env` (SDK уже подключен)
+10. **Углубление товаров/заказов в админке** (задача #8) — сейчас товары = модерация, заказы = просмотр. Нужно решение: admin правит карточки мерчантов vs богатая модерация; admin меняет статус заказа vs только просмотр.
 
 ### 🟢 Nice-to-have
 
-10. **next-intl на оставшиеся страницы** — сейчас переведены footer + bottom-nav, нужно расширить на product card, account, formats (цены, даты)
-11. **Admin frontend полный** — backend есть, UI местами заглушки
-12. **CASL правила формализованы** — сейчас доступ через @Roles + ручные проверки
-13. **Bundle analyzer + Lighthouse audit**
+11. **next-intl на оставшиеся страницы** — сейчас переведены footer + bottom-nav, нужно расширить на product card, account, formats (цены, даты)
+12. ~~**Admin frontend полный**~~ ✅ СДЕЛАНО — 21 страница, все разделы на реальных endpoint'ах (см. §2)
+13. **CASL правила формализованы** — сейчас доступ через @Roles + ручные проверки
+14. **Bundle analyzer + Lighthouse audit**
+15. **CommissionRule rules-engine** — модель в БД есть, но расчёт берёт `merchant.commissionRate`; если нужны правила по категориям/типам — подключить к `OrdersService`
+16. **Аренда ячеек склада (WMS фаза 4)** — monthlyRentalFee → RentalFee + биллинг; QR-сканирование; FIFO-списание при отгрузке
 
 ---
 
@@ -223,17 +242,18 @@
 - Uzum: OAuth + REST
 - Тесты с реальными test-кредами провайдеров
 
-### Если нужны **промокоды** (2-3 дня):
+### ~~Промокоды~~ ✅ СДЕЛАНО (2026-05-29)
 
-- БД (`PromoCode`, `PromoCodeUsage`) уже есть
-- Backend:
-  - `apps/api/src/modules/admin/promocodes/` — CRUD endpoints
-  - `apps/api/src/modules/cart/promocodes.service.ts` — валидация + расчёт скидки
-  - Интегрировать в `PricingService` (новое поле `discountFromPromo`)
-- Frontend:
-  - `apps/admin/src/app/promocodes/` — список + форма
-  - В checkout: input "Промокод" → `POST /promocodes/validate` → пересчёт
-- Тесты: unit для validate (просроченный/исчерпанный/per-user-limit), E2E
+- Модуль `apps/api/src/modules/promo-codes/` — `PromoCodesService` (CRUD + evaluate + recordUsage), `AdminPromoCodesController`
+- Интеграция: `cart.service` (`/cart/promo`), `orders.service` (фиксация в транзакции), `pricing` (поле discount)
+- UI: admin `/monetization` (таб Промокоды) + блок промокода в web `/cart`
+- Тесты: 15 unit (просрочен/исчерпан/per-user-limit/min-order/applicability/cap)
+
+### Если нужно **углубить товары/заказы в админке** (задача #8, 1-2 дня):
+
+- Сначала уточнить у пользователя объём (см. §3 п.10)
+- Товары (богатая модерация): `apps/admin/src/app/catalog/products/` — детальная карточка + toggle featured/active/hide поверх `admin/products`
+- Заказы: страница `/orders/[id]` (endpoint `GET /admin/orders/:id` уже есть) + при необходимости смена статуса через `OrderStatusService` (state machine — не дёргать поле напрямую)
 
 ### Если нужно **больше тестов** (1 день):
 
