@@ -109,4 +109,12 @@ export class ListProductsDto {
   @IsOptional()
   @IsUUID()
   carModificationId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Фильтр по характеристикам. Формат: "slug:val1,val2;slug2:val3" (значения внутри атрибута — OR, между атрибутами — AND)',
+  })
+  @IsOptional()
+  @IsString()
+  attrs?: string;
 }

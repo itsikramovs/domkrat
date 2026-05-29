@@ -83,6 +83,13 @@ export class ProductsService {
       ];
     }
 
+    // Фильтр по характеристикам: "slug:val1,val2;slug2:val3"
+    // Внутри атрибута значения — OR, между атрибутами — AND (товар должен иметь все выбранные группы).
+    const attrConditions = this.parseAttrFilter(query.attrs);
+    if (attrConditions.length > 0) {
+      where.AND = attrConditions;
+    }
+
     const orderBy: Prisma.ProductOrderByWithRelationInput[] = (() => {
       switch (query.sort) {
         case ProductSort.NEW:
@@ -473,6 +480,46 @@ export class ProductsService {
       };
     }
     return null;
+  }
+
+  /**
+   * Парсит строку фильтра характеристик "slug:val1,val2;slug2:val3" в массив условий Prisma.
+   * Каждый атрибут → отдельное условие AND (товар должен соответствовать всем атрибутам);
+   * значения внутри атрибута объединяются OR (любое из значений подходит).
+   */
+  private parseAttrFilter(attrs?: string): Prisma.ProductWhereInput[] {
+    if (!attrs) return [];
+    const conditions: Prisma.ProductWhereInput[] = [];
+    for (const part of attrs.split(';')) {
+      const [slug, rawValues] = part.split(':');
+      if (!slug || !rawValues) continue;
+      const values = rawValues
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (values.length === 0) continue;
+
+      const numeric = values
+        .filter((v) => v !== '' && !Number.isNaN(Number(v)))
+        .map((v) => new Prisma.Decimal(v));
+
+      const valueMatch: Prisma.ProductAttributeWhereInput[] = [
+        { valueEnum: { in: values } },
+        { valueMultiEnum: { hasSome: values } },
+        { valueString: { in: values } },
+      ];
+      if (numeric.length > 0) valueMatch.push({ valueNumber: { in: numeric } });
+
+      conditions.push({
+        attributes: {
+          some: {
+            attribute: { slug: slug.trim() },
+            OR: valueMatch,
+          },
+        },
+      });
+    }
+    return conditions;
   }
 
   /** Публичный алиас для использования из других модулей (uploads, и т.п.) */

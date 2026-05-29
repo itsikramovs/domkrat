@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AttributeDataType, Prisma } from '@prisma/client';
+import { AttributeDataType, Prisma, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import type {
@@ -108,6 +108,70 @@ export class AttributesService {
       include: { group: { select: { id: true, name: true, slug: true, position: true } } },
     });
     return attrs;
+  }
+
+  /**
+   * Фасеты для страницы категории: фильтруемые характеристики + значения, реально
+   * присутствующие у активных товаров этой категории, с количеством товаров на значение.
+   * Числовые значения нормализуются (185.0000 → "185"). Используется панелью фильтров витрины.
+   */
+  async facetsForCategory(categoryId: string) {
+    const attrs = (await this.resolveForCategory(categoryId)).filter((a) => a.isFilterable);
+    if (attrs.length === 0) return [];
+
+    const rows = await this.prisma.productAttribute.findMany({
+      where: {
+        attributeId: { in: attrs.map((a) => a.id) },
+        product: { categoryId, status: ProductStatus.ACTIVE, deletedAt: null },
+      },
+      select: {
+        attributeId: true,
+        valueEnum: true,
+        valueNumber: true,
+        valueMultiEnum: true,
+        valueString: true,
+      },
+    });
+
+    // attributeId → (value code → count)
+    const counts = new Map<string, Map<string, number>>();
+    const bump = (attrId: string, code: string) => {
+      if (!counts.has(attrId)) counts.set(attrId, new Map());
+      const m = counts.get(attrId)!;
+      m.set(code, (m.get(code) ?? 0) + 1);
+    };
+    for (const r of rows) {
+      if (r.valueEnum) bump(r.attributeId, r.valueEnum);
+      else if (r.valueMultiEnum.length) for (const v of r.valueMultiEnum) bump(r.attributeId, v);
+      else if (r.valueNumber != null) bump(r.attributeId, String(Number(r.valueNumber)));
+      else if (r.valueString) bump(r.attributeId, r.valueString);
+    }
+
+    return attrs
+      .map((a) => {
+        const m = counts.get(a.id);
+        if (!m || m.size === 0) return null;
+        const enumOrder = Array.isArray(a.enumValues)
+          ? (a.enumValues as Array<{ value: string }>).map((o) => o.value)
+          : [];
+        const options = Array.from(m.entries())
+          .map(([value, count]) => ({ value, count }))
+          .sort((x, y) => {
+            if (a.dataType === AttributeDataType.NUMBER) return Number(x.value) - Number(y.value);
+            if (enumOrder.length) return enumOrder.indexOf(x.value) - enumOrder.indexOf(y.value);
+            return y.count - x.count;
+          });
+        return {
+          id: a.id,
+          slug: a.slug,
+          name: a.name,
+          unit: a.unit,
+          dataType: a.dataType,
+          enumValues: a.enumValues,
+          options,
+        };
+      })
+      .filter(Boolean);
   }
 
   /** Цепочка id категории от самой категории вверх до корня (защита от циклов). */

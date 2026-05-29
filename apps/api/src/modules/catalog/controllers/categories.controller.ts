@@ -28,6 +28,14 @@ export class CategoriesController {
     return this.attributes.resolveForCategory(id);
   }
 
+  @Get(':id/facets')
+  @ApiOperation({
+    summary: 'Фасеты для фильтрации: фильтруемые характеристики + значения с counts',
+  })
+  facetsForCategory(@Param('id', ParseUUIDPipe) id: string) {
+    return this.attributes.facetsForCategory(id);
+  }
+
   @Get(':slug')
   @ApiOperation({ summary: 'Категория по slug' })
   getBySlug(@Param('slug') slug: string) {

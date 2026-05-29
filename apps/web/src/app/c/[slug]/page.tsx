@@ -2,6 +2,10 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import {
+  CategoryAttributeFilter,
+  type CategoryFacet,
+} from '@/components/catalog/category-attribute-filter';
 import { CategoryCarFilter } from '@/components/catalog/category-car-filter';
 import { ProductCard } from '@/components/home/product-card';
 import { serverApi } from '@/lib/api-client';
@@ -21,6 +25,7 @@ interface PageProps {
     makeName?: string;
     modelId?: string;
     modelName?: string;
+    attrs?: string;
   };
 }
 
@@ -59,8 +64,30 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   if (searchParams.priceMax) qs.set('priceMax', searchParams.priceMax);
   if (searchParams.makeId) qs.set('carMakeId', searchParams.makeId);
   if (searchParams.modelId) qs.set('carModelId', searchParams.modelId);
+  if (searchParams.attrs) qs.set('attrs', searchParams.attrs);
 
-  const products = await api<Paginated<Product>>(`/products?${qs.toString()}`);
+  const [products, facets] = await Promise.all([
+    api<Paginated<Product>>(`/products?${qs.toString()}`),
+    api<CategoryFacet[]>(`/categories/${category.id}/facets`).catch(() => [] as CategoryFacet[]),
+  ]);
+
+  // Сохраняет все активные фильтры при смене сортировки/страницы (иначе выбор сбрасывается).
+  const buildHref = (overrides: Record<string, string | undefined>) => {
+    const sp = new URLSearchParams();
+    const merged: Record<string, string | undefined> = {
+      sort,
+      priceMin: searchParams.priceMin,
+      priceMax: searchParams.priceMax,
+      makeId: searchParams.makeId,
+      makeName: searchParams.makeName,
+      modelId: searchParams.modelId,
+      modelName: searchParams.modelName,
+      attrs: searchParams.attrs,
+      ...overrides,
+    };
+    for (const [k, v] of Object.entries(merged)) if (v) sp.set(k, v);
+    return `/c/${params.slug}?${sp.toString()}`;
+  };
 
   return (
     <div className="space-y-4 px-4 py-4 md:container md:px-0 md:py-8">
@@ -88,6 +115,9 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         }}
       />
 
+      {/* Фильтр по характеристикам */}
+      <CategoryAttributeFilter slug={params.slug} facets={facets} />
+
       {/* Подкатегории как чипы */}
       {category.children && category.children.length > 0 ? (
         <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:px-0">
@@ -108,10 +138,12 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         {SORTS.map((s) => (
           <Link
             key={s.value}
-            href={`/c/${params.slug}?sort=${s.value}`}
+            href={buildHref({ sort: s.value })}
             className={cn(
               'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors',
-              s.value === sort ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground hover:bg-accent',
+              s.value === sort
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-foreground hover:bg-accent',
             )}
           >
             {s.label}
@@ -126,7 +158,9 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
       </div>
 
       {products.data.length === 0 ? (
-        <div className="py-12 text-center text-muted-foreground">В этой категории пока нет товаров</div>
+        <div className="py-12 text-center text-muted-foreground">
+          В этой категории пока нет товаров
+        </div>
       ) : null}
 
       {products.meta.totalPages > 1 ? (
@@ -134,7 +168,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
           {Array.from({ length: products.meta.totalPages }, (_, i) => i + 1).map((p) => (
             <Link
               key={p}
-              href={`/c/${params.slug}?page=${p}&sort=${sort}`}
+              href={buildHref({ page: String(p) })}
               className={cn(
                 'flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-medium',
                 p === page ? 'bg-primary text-primary-foreground' : 'bg-secondary hover:bg-accent',
