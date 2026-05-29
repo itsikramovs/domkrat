@@ -337,6 +337,27 @@ export function useDeleteAttribute() {
   });
 }
 
+// ============================ Аналитика платформы ============================
+export interface PlatformAnalytics {
+  rangeDays: number;
+  totals: { merchants: number; customers: number; products: number; newCustomers: number };
+  orders: { total: number; paid: number; completed: number; cancelled: number };
+  revenue: { gmv: string; commission: string; payout: string };
+  averageCheck: string;
+  daily: Array<{ date: string; orders: number; gmv: string }>;
+  topMerchants: Array<{ merchantId: string; brandName: string; gmv: string; orders: number }>;
+  topCategories: Array<{ categoryId: string; name: ML | null; quantitySold: number }>;
+}
+
+export function usePlatformAnalytics(range: number) {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-analytics', range, t],
+    queryFn: () => apiFetch<PlatformAnalytics>(`/admin/analytics?range=${range}`),
+    enabled: Boolean(t),
+  });
+}
+
 // ============================ Баннеры ============================
 export type BannerPosition = 'HOME_MAIN' | 'HOME_SECONDARY' | 'CATEGORY_TOP' | 'SIDEBAR';
 

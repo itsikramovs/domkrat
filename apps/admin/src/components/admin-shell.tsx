@@ -3,6 +3,7 @@
 import {
   Award,
   Banknote,
+  BarChart3,
   Contact,
   GalleryHorizontalEnd,
   LayoutDashboard,
@@ -34,7 +35,13 @@ type Item = { href: string; label: string; icon: LucideIcon };
 type Group = { title: string; items: Item[] };
 
 const GROUPS: Group[] = [
-  { title: 'Обзор', items: [{ href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard }] },
+  {
+    title: 'Обзор',
+    items: [
+      { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
+      { href: '/analytics', label: 'Аналитика', icon: BarChart3 },
+    ],
+  },
   {
     title: 'Каталог',
     items: [

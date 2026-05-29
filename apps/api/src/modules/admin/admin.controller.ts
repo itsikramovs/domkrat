@@ -27,6 +27,7 @@ import { HoldReleaseService } from '../finance/hold-release.service';
 
 import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { CreateStaffDto, SetStaffRolesDto } from './dto/create-staff.dto';
+import { AdminAnalyticsService } from './services/admin-analytics.service';
 import { AdminCustomersService } from './services/admin-customers.service';
 import { AdminFinanceService } from './services/admin-finance.service';
 import { AdminMerchantsService } from './services/admin-merchants.service';
@@ -44,7 +45,17 @@ export class AdminController {
     private readonly orders: AdminOrdersService,
     private readonly finance: AdminFinanceService,
     private readonly holdRelease: HoldReleaseService,
+    private readonly analytics: AdminAnalyticsService,
   ) {}
+
+  // ============================================================ Analytics
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @Get('analytics')
+  @ApiOperation({ summary: 'Платформенная аналитика (GMV, заказы, топы)' })
+  analyticsSummary(@Query('range') range?: string) {
+    const days = Math.min(Math.max(Number(range) || 30, 1), 365);
+    return this.analytics.summary(days);
+  }
 
   // ============================================================ Users
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.SUPPORT_AGENT)
