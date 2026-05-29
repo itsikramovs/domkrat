@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, LogOut, Package, ShieldCheck, Wallet } from 'lucide-react';
+import { BarChart3, LogOut, Package, ShieldCheck, Wallet, Warehouse } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -20,6 +20,7 @@ export function AdminHeader() {
     { href: '/dashboard', label: 'Дашборд', icon: BarChart3 },
     { href: '/merchants', label: 'Мерчанты', icon: ShieldCheck },
     { href: '/orders', label: 'Заказы', icon: Package },
+    { href: '/warehouses', label: 'Склады', icon: Warehouse },
     { href: '/finance', label: 'Финансы', icon: Wallet },
   ];
 
