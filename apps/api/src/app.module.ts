@@ -9,6 +9,7 @@ import { LoggerModule } from 'nestjs-pino';
 
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BannersModule } from './modules/banners/banners.module';
 import { CarsModule } from './modules/cars/cars.module';
@@ -73,6 +74,7 @@ import { UsersModule } from './modules/users/users.module';
     FinanceModule,
     MerchantAnalyticsModule,
     AdminModule,
+    InventoryModule,
     HealthModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
