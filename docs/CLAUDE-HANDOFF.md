@@ -22,11 +22,14 @@
 
 ✅ **Создание мерчантов из админки** (`feat(admin)`): `POST /admin/merchants` создаёт владельца (User+роль MERCHANT) + компанию (Merchant, ACTIVE) в транзакции, авто-slug, форма в `admin.domcrat.uz/merchants` («+ Создать мерчанта»). Проверено: владелец логинится, мерчант ACTIVE в списке. Раньше создания мерчантов в приложении НЕ было вообще. (Тестовый мерчант `AvtoZap Toshkent` / `seller1@domcrat.uz` создан при проверке — можно удалить/оставить.)
 
+✅ **Современный редизайн витрины** (`feat(web)` `072bb26`): refresh дизайн-токенов (shadow-scale, brand-gradient, fade-up) + компонентов (Button gradient+press, Card, category-tile, product-card hover-lift + убран emoji-плейсхолдер, section-header accent, bottom-nav active-pill, hero gradient). Каскадно на все страницы, без правок роутов/хендлеров. **Проверено Playwright (390px)**: overflow нет; category→product→В корзину→cart, bottom-nav, login, search — всё работает. Скрипты QA: `~/pw-qa/{shot,verify,verify2}.js`. _(Редизайн только web-витрины; merchant/admin — внутренние панели, не трогал.)_
+
+✅ **Автозапуск всех сервисов проверен** (запрос пользователя): user-systemd (5 юнитов `enabled`) + `Linger=yes` + **docker daemon `enabled` + все контейнеры `restart=unless-stopped`**. На ребуте/сбое всё само поднимается; `Restart=always` (5s) гасит гонку «БД ещё не готова». Ручных действий на ребуте не нужно.
+
 **Остаётся ручное / по решению пользователя:**
 
-1. **Визуальная QA вёрстки** — Playwright+Chromium поставлены в `~/pw-qa` (скрипт `~/pw-qa/shot.js` снимает моб. скриншоты 390px + детект overflow). Не хватает системных либ Chromium → **нужен один sudo**: `cd /home/samandar/pw-qa && sudo npx playwright install-deps chromium`. После этого скриншоты снимаю сам. Код-аудит вёрстки уже пройден — красных флагов нет.
-2. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить**. Включается по команде (токен с `Access:Edit` есть).
-3. **Отозвать API-токены** (только дашборд): старый DNS-only — отозвать; новый широкий (`~/.config/cloudflare-api.token`) — оставить, пока нужны мои правки в CF. **Решено отложить (приоритет — рабочий маркетплейс).**
+1. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить**. Включается по команде (токен с `Access:Edit` есть).
+2. **Отозвать API-токены** (только дашборд): старый DNS-only — отозвать; новый широкий (`~/.config/cloudflare-api.token`) — оставить, пока нужны мои правки в CF. **Решено отложить (приоритет — рабочий маркетплейс).**
 
 **Закоммичено + запушено** на `master` (github): `dc6b0ba` deploy, `e7c0666` handoff, `7726e5e` user-systemd, `84009ea` fix(email), `5914f59` feat(admin) create merchants.
 
