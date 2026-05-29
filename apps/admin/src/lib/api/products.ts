@@ -187,3 +187,89 @@ export function useQuickAddCell(warehouseId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-wh-cells', warehouseId] }),
   });
 }
+
+// -------- Product images (admin) --------
+/** Presign в MinIO + PUT файла. Возвращает публичный URL. */
+export async function uploadProductImage(productId: string, file: File): Promise<string> {
+  const presign = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
+    '/uploads/presign-product-image',
+    { method: 'POST', body: { productId, contentType: file.type, filename: file.name } },
+  );
+  const put = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!put.ok) throw new Error(`Загрузка не удалась: ${put.status}`);
+  return presign.publicUrl;
+}
+
+export function useAddProductImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; isPrimary?: boolean }) =>
+      apiFetch(`/admin/products/${id}/images`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
+  });
+}
+
+export function useRemoveProductImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) =>
+      apiFetch(`/admin/products/${id}/images/${imageId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
+  });
+}
+
+export function useSetPrimaryImage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (imageId: string) =>
+      apiFetch(`/admin/products/${id}/images/${imageId}/primary`, { method: 'PATCH', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', id] }),
+  });
+}
+
+// -------- Multi-line приёмка --------
+export interface BatchReceiveItem {
+  productId: string;
+  cellId: string;
+  quantity: number;
+  unitCost?: number;
+}
+
+export function useReceiveBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { merchantId: string; warehouseId: string; items: BatchReceiveItem[] }) =>
+      apiFetch('/admin/products/receive-batch', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-mod-products'] }),
+  });
+}
+
+export interface AdminProductListItem {
+  id: string;
+  sku: string;
+  name: ML;
+  status: string;
+  price: string;
+}
+
+export function useAdminProductList(filter: {
+  merchantId?: string;
+  status?: string;
+  search?: string;
+}) {
+  const t = useTok();
+  const qs = new URLSearchParams();
+  if (filter.merchantId) qs.set('merchantId', filter.merchantId);
+  if (filter.status) qs.set('status', filter.status);
+  if (filter.search) qs.set('search', filter.search);
+  qs.set('perPage', '100');
+  return useQuery({
+    queryKey: ['admin-product-list', filter, t],
+    queryFn: () => apiFetch<{ data: AdminProductListItem[] }>(`/admin/products?${qs.toString()}`),
+    enabled: Boolean(t && filter.merchantId),
+  });
+}

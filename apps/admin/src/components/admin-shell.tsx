@@ -11,6 +11,7 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  PackagePlus,
   PackageSearch,
   RotateCcw,
   Settings,
@@ -76,7 +77,13 @@ const GROUPS: Group[] = [
       { href: '/monetization', label: 'Монетизация', icon: Ticket },
     ],
   },
-  { title: 'Склад', items: [{ href: '/warehouses', label: 'Склады', icon: Warehouse }] },
+  {
+    title: 'Склад',
+    items: [
+      { href: '/warehouses', label: 'Склады', icon: Warehouse },
+      { href: '/warehouses/receive', label: 'Приёмка партии', icon: PackagePlus },
+    ],
+  },
   {
     title: 'Финансы',
     items: [
