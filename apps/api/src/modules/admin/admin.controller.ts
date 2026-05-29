@@ -25,6 +25,7 @@ import type { AuthenticatedUser } from '../auth/types';
 
 import { HoldReleaseService } from '../finance/hold-release.service';
 
+import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { AdminFinanceService } from './services/admin-finance.service';
 import { AdminMerchantsService } from './services/admin-merchants.service';
 import { AdminOrdersService } from './services/admin-orders.service';
@@ -70,10 +71,7 @@ export class AdminController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Patch('users/:id/status')
   @ApiOperation({ summary: 'Активировать / заблокировать' })
-  setUserStatus(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { isActive: boolean },
-  ) {
+  setUserStatus(@Param('id', ParseUUIDPipe) id: string, @Body() body: { isActive: boolean }) {
     if (typeof body.isActive !== 'boolean') throw new BadRequestException('isActive required');
     return this.users.setActive(id, body.isActive);
   }
@@ -96,6 +94,13 @@ export class AdminController {
       page: page ? Number(page) : 1,
       perPage: perPage ? Number(perPage) : 20,
     });
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Post('merchants')
+  @ApiOperation({ summary: 'Создать мерчанта (владелец + компания), сразу ACTIVE' })
+  createMerchant(@Body() dto: CreateMerchantDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.merchants.create(dto, user.id);
   }
 
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
@@ -130,10 +135,7 @@ export class AdminController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Post('merchants/:id/suspend')
   @ApiOperation({ summary: 'Приостановить' })
-  suspendMerchant(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { until?: string },
-  ) {
+  suspendMerchant(@Param('id', ParseUUIDPipe) id: string, @Body() body: { until?: string }) {
     return this.merchants.suspend(id, body.until ? new Date(body.until) : undefined);
   }
 
@@ -241,7 +243,8 @@ export class AdminController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() body: { externalTransactionId: string },
   ) {
-    if (!body.externalTransactionId) throw new BadRequestException('externalTransactionId required');
+    if (!body.externalTransactionId)
+      throw new BadRequestException('externalTransactionId required');
     return this.finance.completeWithdrawal(id, user.id, body.externalTransactionId);
   }
 

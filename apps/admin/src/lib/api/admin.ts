@@ -18,7 +18,12 @@ export interface AdminMerchant {
   contactEmail: string | null;
   contactPhone: string | null;
   createdAt: string;
-  user: { email: string | null; phone: string | null; firstName: string | null; lastName: string | null };
+  user: {
+    email: string | null;
+    phone: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  };
   balance: {
     availableBalance: string;
     pendingBalance: string;
@@ -75,7 +80,9 @@ export function useFinanceDashboard() {
   });
 }
 
-export function useAdminMerchants(filter: { status?: string; verificationStatus?: string; search?: string } = {}) {
+export function useAdminMerchants(
+  filter: { status?: string; verificationStatus?: string; search?: string } = {},
+) {
   const t = useAuthStore((s) => s.accessToken);
   const qs = new URLSearchParams();
   if (filter.status) qs.set('status', filter.status);
@@ -115,6 +122,31 @@ export function useSuspendMerchant() {
   });
 }
 
+export interface CreateMerchantInput {
+  ownerEmail: string;
+  ownerPassword: string;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerPhone?: string;
+  merchantType: 'TYPE_1' | 'TYPE_2';
+  legalType: 'INDIVIDUAL' | 'LLC' | 'IE' | 'OTHER';
+  legalName: string;
+  brandName: string;
+  slug?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  taxId?: string;
+}
+
+export function useCreateMerchant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMerchantInput) =>
+      apiFetch('/admin/merchants', { method: 'POST', body: input }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-merchants'] }),
+  });
+}
+
 export function useAdminOrders(filter: { status?: string; search?: string } = {}) {
   const t = useAuthStore((s) => s.accessToken);
   const qs = new URLSearchParams();
@@ -131,8 +163,7 @@ export function useAdminWithdrawals(status?: string) {
   const t = useAuthStore((s) => s.accessToken);
   return useQuery<Paginated<AdminWithdrawal>>({
     queryKey: ['admin-withdrawals', status, t],
-    queryFn: () =>
-      apiFetch(`/admin/finance/withdrawals${status ? `?status=${status}` : ''}`),
+    queryFn: () => apiFetch(`/admin/finance/withdrawals${status ? `?status=${status}` : ''}`),
     enabled: Boolean(t),
   });
 }
