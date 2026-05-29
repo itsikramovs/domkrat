@@ -123,6 +123,58 @@ export function useSuspendMerchant() {
   });
 }
 
+export function useBanMerchant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/admin/merchants/${id}/ban`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-merchants'] }),
+  });
+}
+
+// -------- Merchant KYC documents --------
+export interface MerchantDocument {
+  id: string;
+  documentType: string;
+  fileUrl: string;
+  fileName: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewNotes: string | null;
+  uploadedAt: string;
+}
+
+export function useMerchantDocuments(merchantId: string | null) {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery<MerchantDocument[]>({
+    queryKey: ['admin-merchant-docs', merchantId, t],
+    queryFn: () => apiFetch(`/admin/merchants/${merchantId}/documents`),
+    enabled: Boolean(t && merchantId),
+  });
+}
+
+export function useReviewMerchantDocument(merchantId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      docId,
+      status,
+      notes,
+    }: {
+      docId: string;
+      status: 'APPROVED' | 'REJECTED';
+      notes?: string;
+    }) =>
+      apiFetch(`/admin/merchants/${merchantId}/documents/${docId}`, {
+        method: 'PATCH',
+        body: { status, notes },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-merchant-docs', merchantId] });
+      void qc.invalidateQueries({ queryKey: ['admin-merchants'] });
+    },
+  });
+}
+
 export interface CreateMerchantInput {
   ownerEmail: string;
   ownerPassword: string;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { AuthGate } from '@/components/auth-gate';
+import { MerchantDocuments } from '@/components/merchant-documents';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import {
   useAdminMerchants,
   useApproveMerchant,
+  useBanMerchant,
   useCreateMerchant,
   useRejectMerchant,
   useSuspendMerchant,
@@ -35,6 +37,17 @@ function MerchantsInner() {
   const approve = useApproveMerchant();
   const reject = useRejectMerchant();
   const suspend = useSuspendMerchant();
+  const ban = useBanMerchant();
+
+  async function doBan(id: string) {
+    if (!confirm('Заблокировать мерчанта (BANNED)? Действие жёсткое.')) return;
+    try {
+      await ban.mutateAsync(id);
+      toast.success('Мерчант заблокирован');
+    } catch (e) {
+      toast.error(e instanceof ApiHttpError ? e.body.message : 'Ошибка');
+    }
+  }
 
   async function doApprove(id: string) {
     try {
@@ -128,6 +141,7 @@ function MerchantsInner() {
                       {formatPrice(m.balance.totalEarned)}
                     </div>
                   ) : null}
+                  <MerchantDocuments merchantId={m.id} count={m._count.documents} />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {m.status === 'PENDING' || m.verificationStatus !== 'APPROVED' ? (
@@ -152,11 +166,21 @@ function MerchantsInner() {
                   {m.status === 'ACTIVE' ? (
                     <Button
                       size="sm"
-                      variant="destructive"
+                      variant="outline"
                       onClick={() => doSuspend(m.id)}
                       disabled={suspend.isPending}
                     >
                       Приостановить
+                    </Button>
+                  ) : null}
+                  {m.status === 'ACTIVE' || m.status === 'SUSPENDED' ? (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => doBan(m.id)}
+                      disabled={ban.isPending}
+                    >
+                      Заблокировать
                     </Button>
                   ) : null}
                 </div>
