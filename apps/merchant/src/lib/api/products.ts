@@ -54,9 +54,30 @@ export interface ProductCompatibility {
   } | null;
 }
 
+export interface ProductAttributeValue {
+  attributeId: string;
+  valueString?: string | null;
+  valueNumber?: number | string | null;
+  valueBoolean?: boolean | null;
+  valueEnum?: string | null;
+  valueMultiEnum?: string[];
+}
+
+export interface MerchantProductAttribute extends ProductAttributeValue {
+  id: string;
+  attribute: {
+    id: string;
+    name: MultiLangText;
+    slug: string;
+    dataType: string;
+    unit: string | null;
+  };
+}
+
 export interface MerchantProduct extends Product {
   compatibilities?: ProductCompatibility[];
   oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
+  attributes?: MerchantProductAttribute[];
 }
 
 export function useMerchantProduct(id: string | null) {
@@ -81,6 +102,7 @@ export interface CreateProductInput {
   compareAtPrice?: number;
   vatRate?: number;
   status?: ProductStatus;
+  attributes?: ProductAttributeValue[];
 }
 
 export function useCreateProduct() {

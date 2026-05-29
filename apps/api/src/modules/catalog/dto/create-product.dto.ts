@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ProductStatus } from '@prisma/client';
 import {
+  IsArray,
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -13,6 +15,39 @@ import {
 } from 'class-validator';
 
 import { MultiLangTextDto, OptionalMultiLangTextDto } from './multilang.dto';
+
+/** Значение одной характеристики товара. Заполняется в зависимости от dataType атрибута. */
+export class ProductAttributeValueDto {
+  @ApiProperty()
+  @IsUUID()
+  attributeId!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  valueString?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  valueNumber?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  valueBoolean?: boolean;
+
+  @ApiPropertyOptional({ description: 'Код выбранной опции (для ENUM)' })
+  @IsOptional()
+  @IsString()
+  valueEnum?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Коды опций (для MULTI_ENUM)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  valueMultiEnum?: string[];
+}
 
 export class CreateProductDto {
   @ApiProperty({ type: MultiLangTextDto })
@@ -94,6 +129,13 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @ApiPropertyOptional({ type: [ProductAttributeValueDto], description: 'Характеристики товара' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductAttributeValueDto)
+  attributes?: ProductAttributeValueDto[];
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}

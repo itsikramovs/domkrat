@@ -12,6 +12,7 @@ import type { CreateCompatibilityDto } from '../dto/compatibility.dto';
 import type {
   CreateProductDto,
   ModerateProductDto,
+  ProductAttributeValueDto,
   UpdateProductDto,
   UpdateProductStatusDto,
 } from '../dto/create-product.dto';
@@ -213,28 +214,34 @@ export class ProductsService {
     const slug = dto.slug ?? this.toSlug(dto.name.ru) + '-' + dto.sku.toLowerCase().slice(0, 8);
 
     try {
-      const created = await this.prisma.product.create({
-        data: {
-          merchantId,
-          categoryId: dto.categoryId,
-          brandId: dto.brandId,
-          sku: dto.sku,
-          slug,
-          name: dto.name as unknown as Prisma.InputJsonValue,
-          description: dto.description as unknown as Prisma.InputJsonValue,
-          shortDescription: dto.shortDescription as unknown as Prisma.InputJsonValue,
-          oemNumber: dto.oemNumber,
-          barcode: dto.barcode,
-          manufacturerPartNumber: dto.manufacturerPartNumber,
-          weight: dto.weight !== undefined ? new Prisma.Decimal(dto.weight) : undefined,
-          price: new Prisma.Decimal(dto.price),
-          compareAtPrice:
-            dto.compareAtPrice !== undefined ? new Prisma.Decimal(dto.compareAtPrice) : undefined,
-          vatRate:
-            dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
-          status: dto.status ?? ProductStatus.PENDING_REVIEW,
-        },
-        include: PRODUCT_INCLUDE,
+      const created = await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.create({
+          data: {
+            merchantId,
+            categoryId: dto.categoryId,
+            brandId: dto.brandId,
+            sku: dto.sku,
+            slug,
+            name: dto.name as unknown as Prisma.InputJsonValue,
+            description: dto.description as unknown as Prisma.InputJsonValue,
+            shortDescription: dto.shortDescription as unknown as Prisma.InputJsonValue,
+            oemNumber: dto.oemNumber,
+            barcode: dto.barcode,
+            manufacturerPartNumber: dto.manufacturerPartNumber,
+            weight: dto.weight !== undefined ? new Prisma.Decimal(dto.weight) : undefined,
+            price: new Prisma.Decimal(dto.price),
+            compareAtPrice:
+              dto.compareAtPrice !== undefined ? new Prisma.Decimal(dto.compareAtPrice) : undefined,
+            vatRate:
+              dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
+            status: dto.status ?? ProductStatus.PENDING_REVIEW,
+          },
+          include: PRODUCT_INCLUDE,
+        });
+        if (dto.attributes !== undefined) {
+          await this.syncAttributes(tx, product.id, dto.attributes);
+        }
+        return product;
       });
       this.emitIndexed(created.id);
       return created;
@@ -268,16 +275,58 @@ export class ProductsService {
       data.brand = dto.brandId ? { connect: { id: dto.brandId } } : { disconnect: true };
 
     try {
-      const updated = await this.prisma.product.update({
-        where: { id },
-        data,
-        include: PRODUCT_INCLUDE,
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const product = await tx.product.update({
+          where: { id },
+          data,
+          include: PRODUCT_INCLUDE,
+        });
+        if (dto.attributes !== undefined) {
+          await this.syncAttributes(tx, product.id, dto.attributes);
+        }
+        return product;
       });
       this.emitIndexed(updated.id);
       return updated;
     } catch (error) {
       this.handleUniqueErr(error);
     }
+  }
+
+  /**
+   * Полностью заменяет набор характеристик товара. Пустые значения отбрасываются,
+   * чтобы не плодить пустые ProductAttribute (фильтры/спеки опираются на наличие значения).
+   */
+  private async syncAttributes(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    attributes: ProductAttributeValueDto[],
+  ): Promise<void> {
+    await tx.productAttribute.deleteMany({ where: { productId } });
+    const rows = attributes
+      .filter((a) => this.hasValue(a))
+      .map((a) => ({
+        productId,
+        attributeId: a.attributeId,
+        valueString: a.valueString ?? null,
+        valueNumber: a.valueNumber !== undefined ? new Prisma.Decimal(a.valueNumber) : null,
+        valueBoolean: a.valueBoolean ?? null,
+        valueEnum: a.valueEnum ?? null,
+        valueMultiEnum: a.valueMultiEnum ?? [],
+      }));
+    if (rows.length > 0) {
+      await tx.productAttribute.createMany({ data: rows, skipDuplicates: true });
+    }
+  }
+
+  private hasValue(a: ProductAttributeValueDto): boolean {
+    return (
+      (a.valueString !== undefined && a.valueString !== '') ||
+      a.valueNumber !== undefined ||
+      a.valueBoolean !== undefined ||
+      (a.valueEnum !== undefined && a.valueEnum !== '') ||
+      (a.valueMultiEnum !== undefined && a.valueMultiEnum.length > 0)
+    );
   }
 
   async updateStatus(merchantId: string, id: string, dto: UpdateProductStatusDto) {

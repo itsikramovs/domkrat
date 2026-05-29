@@ -93,6 +93,42 @@ export class AttributesService {
     return attr;
   }
 
+  /**
+   * Возвращает характеристики, применимые к категории — с учётом всей цепочки
+   * родителей (атрибут, привязанный к корню «Шины и диски», применим и к подкатегории
+   * «Зимние шины»). Используется формой товара мерчанта и фильтрами каталога.
+   */
+  async resolveForCategory(categoryId: string) {
+    const ancestorIds = await this.ancestorChain(categoryId);
+    if (ancestorIds.length === 0) throw new NotFoundException('Category not found');
+
+    const attrs = await this.prisma.attribute.findMany({
+      where: { categoryIds: { hasSome: ancestorIds } },
+      orderBy: [{ position: 'asc' }, { slug: 'asc' }],
+      include: { group: { select: { id: true, name: true, slug: true, position: true } } },
+    });
+    return attrs;
+  }
+
+  /** Цепочка id категории от самой категории вверх до корня (защита от циклов). */
+  private async ancestorChain(categoryId: string): Promise<string[]> {
+    const ids: string[] = [];
+    let current: string | null = categoryId;
+    let guard = 0;
+    while (current && guard < 12) {
+      guard += 1;
+      const cat: { id: string; parentId: string | null } | null =
+        await this.prisma.category.findUnique({
+          where: { id: current },
+          select: { id: true, parentId: true },
+        });
+      if (!cat) break;
+      ids.push(cat.id);
+      current = cat.parentId;
+    }
+    return ids;
+  }
+
   async createAttribute(dto: CreateAttributeDto) {
     this.assertEnumValues(dto.dataType, dto.enumValues);
     await this.assertGroupExists(dto.attributeGroupId);

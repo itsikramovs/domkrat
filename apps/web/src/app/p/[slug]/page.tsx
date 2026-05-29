@@ -13,6 +13,43 @@ import { formatPrice, pickLocale } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
+type MLText = { ru: string; uz: string };
+
+interface ProductAttr {
+  valueString: string | null;
+  valueNumber: string | null;
+  valueBoolean: boolean | null;
+  valueEnum: string | null;
+  valueMultiEnum: string[];
+  attribute: {
+    name: MLText;
+    unit: string | null;
+    dataType: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'ENUM' | 'MULTI_ENUM';
+    enumValues: Array<{ value: string; label: MLText }> | null;
+  };
+}
+
+/** Форматирует значение характеристики для отображения с учётом типа и локали. */
+function formatAttrValue(a: ProductAttr): string | null {
+  const attr = a.attribute;
+  const enumLabel = (code: string) => {
+    const opt = (attr.enumValues ?? []).find((o) => o.value === code);
+    return opt ? pickLocale(opt.label) : code;
+  };
+  switch (attr.dataType) {
+    case 'BOOLEAN':
+      return a.valueBoolean == null ? null : a.valueBoolean ? 'Да' : 'Нет';
+    case 'NUMBER':
+      return a.valueNumber == null ? null : `${a.valueNumber}${attr.unit ? ` ${attr.unit}` : ''}`;
+    case 'ENUM':
+      return a.valueEnum ? enumLabel(a.valueEnum) : null;
+    case 'MULTI_ENUM':
+      return a.valueMultiEnum.length ? a.valueMultiEnum.map(enumLabel).join(', ') : null;
+    default:
+      return a.valueString || null;
+  }
+}
+
 interface PageProps {
   params: { slug: string };
 }
@@ -36,17 +73,22 @@ function discountPct(price: string, compareAt: string | null): number | null {
 
 export default async function ProductPage({ params }: PageProps) {
   const [product, reviews] = await Promise.all([
-    serverApi()<Product & {
-      attributes?: Array<{ valueString: string | null; attribute: { name: { ru: string }; unit?: string | null } }>;
-      oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
-      compatibilities?: Array<{
-        carMake?: { name: string } | null;
-        carModel?: { name: string; make: { name: string } } | null;
-        carModification?: { name: string; generation: { name: string; model: { name: string; make: { name: string } } } } | null;
-        yearFrom?: number | null;
-        yearTo?: number | null;
-      }>;
-    }>(`/products/${params.slug}`).catch(() => null),
+    serverApi()<
+      Product & {
+        attributes?: ProductAttr[];
+        oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
+        compatibilities?: Array<{
+          carMake?: { name: string } | null;
+          carModel?: { name: string; make: { name: string } } | null;
+          carModification?: {
+            name: string;
+            generation: { name: string; model: { name: string; make: { name: string } } };
+          } | null;
+          yearFrom?: number | null;
+          yearTo?: number | null;
+        }>;
+      }
+    >(`/products/${params.slug}`).catch(() => null),
     fetchProductReviews(params.slug),
   ]);
 
@@ -59,7 +101,9 @@ export default async function ProductPage({ params }: PageProps) {
     <div className="space-y-5 pb-32 md:container md:pb-8 md:py-8">
       {/* Хлебные крошки */}
       <nav className="flex items-center gap-1 px-4 pt-4 text-xs text-muted-foreground md:px-0">
-        <Link href="/" className="hover:text-foreground">Главная</Link>
+        <Link href="/" className="hover:text-foreground">
+          Главная
+        </Link>
         <ChevronRight className="h-3 w-3" />
         <Link href={`/c/${product.category.slug}`} className="hover:text-foreground">
           {pickLocale(product.category.name)}
@@ -99,10 +143,14 @@ export default async function ProductPage({ params }: PageProps) {
               {product.brand ? <Badge variant="outline">{product.brand.name}</Badge> : null}
               <Badge variant="secondary">{product.merchant.brandName}</Badge>
               {product.oemNumber ? (
-                <Badge variant="outline" className="font-mono">OEM: {product.oemNumber}</Badge>
+                <Badge variant="outline" className="font-mono">
+                  OEM: {product.oemNumber}
+                </Badge>
               ) : null}
             </div>
-            <h1 className="text-xl font-bold leading-tight md:text-2xl">{pickLocale(product.name)}</h1>
+            <h1 className="text-xl font-bold leading-tight md:text-2xl">
+              {pickLocale(product.name)}
+            </h1>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {product.reviewsCount > 0 ? (
                 <span className="inline-flex items-center gap-1">
@@ -154,13 +202,42 @@ export default async function ProductPage({ params }: PageProps) {
         </div>
       </div>
 
+      {(() => {
+        const specs = (product.attributes ?? [])
+          .map((a) => ({ name: pickLocale(a.attribute.name), value: formatAttrValue(a) }))
+          .filter((s): s is { name: string; value: string } => Boolean(s.value));
+        if (specs.length === 0) return null;
+        return (
+          <Card className="mx-4 md:mx-0">
+            <CardContent className="space-y-3 p-5">
+              <h3 className="text-sm font-semibold">Характеристики</h3>
+              <dl className="grid gap-x-8 gap-y-0 sm:grid-cols-2">
+                {specs.map((s, i) => (
+                  <div
+                    key={i}
+                    className="flex items-baseline justify-between gap-3 border-b border-dashed border-border/60 py-2 text-sm"
+                  >
+                    <dt className="text-muted-foreground">{s.name}</dt>
+                    <dd className="text-right font-medium">{s.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {product.oemCodes && product.oemCodes.length > 0 ? (
         <Card className="mx-4 md:mx-0">
           <CardContent className="space-y-2 p-5">
             <h3 className="text-sm font-semibold">OEM-номера и аналоги</h3>
             <div className="flex flex-wrap gap-1.5">
               {product.oemCodes.map((o) => (
-                <Badge key={o.oemNumber} variant={o.isPrimary ? 'default' : 'outline'} className="font-mono">
+                <Badge
+                  key={o.oemNumber}
+                  variant={o.isPrimary ? 'default' : 'outline'}
+                  className="font-mono"
+                >
                   {o.manufacturer ? `${o.manufacturer} ` : ''}
                   {o.oemNumber}
                 </Badge>
@@ -179,10 +256,16 @@ export default async function ProductPage({ params }: PageProps) {
                 const label = c.carModification
                   ? `${c.carModification.generation.model.make.name} ${c.carModification.generation.model.name} ${c.carModification.generation.name} ${c.carModification.name}`
                   : c.carModel
-                  ? `${c.carModel.make.name} ${c.carModel.name}`
-                  : c.carMake?.name ?? '';
-                const years = c.yearFrom || c.yearTo ? ` (${c.yearFrom ?? '?'}—${c.yearTo ?? 'наст.'})` : '';
-                return <li key={idx}>• {label}{years}</li>;
+                    ? `${c.carModel.make.name} ${c.carModel.name}`
+                    : (c.carMake?.name ?? '');
+                const years =
+                  c.yearFrom || c.yearTo ? ` (${c.yearFrom ?? '?'}—${c.yearTo ?? 'наст.'})` : '';
+                return (
+                  <li key={idx}>
+                    • {label}
+                    {years}
+                  </li>
+                );
               })}
             </ul>
           </CardContent>

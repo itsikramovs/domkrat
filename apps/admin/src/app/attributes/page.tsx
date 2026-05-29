@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiHttpError } from '@/lib/api-client';
 import {
+  useAdminCategories,
   useAttributeGroups,
   useAttributes,
   useDeleteAttribute,
@@ -165,6 +166,7 @@ type EnumRow = { value: string; ru: string; uz: string };
 function AttributesSection() {
   const groups = useAttributeGroups();
   const attrs = useAttributes();
+  const categories = useAdminCategories();
   const save = useSaveAttribute();
   const del = useDeleteAttribute();
 
@@ -178,10 +180,13 @@ function AttributesSection() {
   const [isFilterable, setIsFilterable] = useState(true);
   const [isSearchable, setIsSearchable] = useState(false);
   const [isRequired, setIsRequired] = useState(false);
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [enumRows, setEnumRows] = useState<EnumRow[]>([]);
 
   const list = attrs.data ?? [];
   const groupList = groups.data ?? [];
+  const catList = categories.data ?? [];
+  const catName = (id: string) => catList.find((c) => c.id === id)?.name.ru ?? id;
   const isEnum = dataType === 'ENUM' || dataType === 'MULTI_ENUM';
 
   function start(a: AdminAttribute | null) {
@@ -195,9 +200,14 @@ function AttributesSection() {
     setIsFilterable(a?.isFilterable ?? true);
     setIsSearchable(a?.isSearchable ?? false);
     setIsRequired(a?.isRequired ?? false);
+    setCategoryIds(a?.categoryIds ?? []);
     setEnumRows(
       (a?.enumValues ?? []).map((v) => ({ value: v.value, ru: v.label.ru, uz: v.label.uz })),
     );
+  }
+
+  function toggleCategory(id: string) {
+    setCategoryIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function submit(e: React.FormEvent) {
@@ -209,6 +219,7 @@ function AttributesSection() {
       isFilterable,
       isSearchable,
       isRequired,
+      categoryIds,
       ...(unit ? { unit } : {}),
       ...(groupId ? { attributeGroupId: groupId } : {}),
     };
@@ -290,6 +301,40 @@ function AttributesSection() {
               <Check label="Фильтруемый" checked={isFilterable} onChange={setIsFilterable} />
               <Check label="В поиске" checked={isSearchable} onChange={setIsSearchable} />
               <Check label="Обязательный" checked={isRequired} onChange={setIsRequired} />
+            </div>
+
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Категории, к которым применима характеристика
+                </span>
+                <span className="text-xs text-muted-foreground">выбрано: {categoryIds.length}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Характеристика появится в форме товара для выбранных категорий и всех их
+                подкатегорий.
+              </p>
+              {catList.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Категории не загружены</p>
+              ) : (
+                <div className="grid max-h-56 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                  {orderCategories(catList).map(({ cat, depth }) => (
+                    <label
+                      key={cat.id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-accent"
+                      style={{ paddingLeft: `${0.5 + depth * 1}rem` }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-input"
+                        checked={categoryIds.includes(cat.id)}
+                        onChange={() => toggleCategory(cat.id)}
+                      />
+                      <span className="truncate">{cat.name.ru}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             {isEnum ? (
@@ -387,6 +432,24 @@ function AttributesSection() {
                     {a.enumValues?.length ? ` · ${a.enumValues.length} опц.` : ''}
                     {a._count?.productAttributes ? ` · ${a._count.productAttributes} товаров` : ''}
                   </div>
+                  {a.categoryIds?.length ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {a.categoryIds.slice(0, 4).map((id) => (
+                        <Badge key={id} variant="outline" className="text-[10px]">
+                          {catName(id)}
+                        </Badge>
+                      ))}
+                      {a.categoryIds.length > 4 ? (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{a.categoryIds.length - 4}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-[10px] text-amber-600">
+                      ⚠ не привязана к категориям — не появится в форме товара
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button size="sm" variant="outline" onClick={() => start(a)}>
@@ -414,6 +477,32 @@ function AttributesSection() {
 }
 
 // ----------------------------- shared bits -----------------------------
+type CatLite = { id: string; name: { ru: string }; parentId: string | null };
+
+/** Раскладывает плоский список категорий в дерево-порядок с глубиной для отступов. */
+function orderCategories(cats: CatLite[]): Array<{ cat: CatLite; depth: number }> {
+  const byParent = new Map<string | null, CatLite[]>();
+  for (const c of cats) {
+    const key = c.parentId ?? null;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key)!.push(c);
+  }
+  const out: Array<{ cat: CatLite; depth: number }> = [];
+  const walk = (parentId: string | null, depth: number) => {
+    for (const c of byParent.get(parentId) ?? []) {
+      out.push({ cat: c, depth });
+      walk(c.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  // На случай «осиротевших» (parent не в списке) — добавим остаток.
+  if (out.length < cats.length) {
+    const seen = new Set(out.map((o) => o.cat.id));
+    for (const c of cats) if (!seen.has(c.id)) out.push({ cat: c, depth: 0 });
+  }
+  return out;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">

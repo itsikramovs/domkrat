@@ -1,13 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { ProductAttributesEditor } from '@/components/product-attributes-editor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useBrands, useCategories } from '@/lib/api/catalog';
-import type { CreateProductInput, MerchantProduct } from '@/lib/api/products';
+import type {
+  CreateProductInput,
+  MerchantProduct,
+  ProductAttributeValue,
+} from '@/lib/api/products';
 import type { Category } from '@/lib/types';
 import { pickLocale } from '@/lib/utils';
 
@@ -44,6 +49,11 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
   const [vatRate, setVatRate] = useState<string>(initial?.vatRate ? String(initial.vatRate) : '12');
   const [descriptionRu, setDescriptionRu] = useState(initial?.description?.ru ?? '');
   const [descriptionUz, setDescriptionUz] = useState(initial?.description?.uz ?? '');
+  const [attributes, setAttributes] = useState<ProductAttributeValue[]>([]);
+
+  const handleAttributesChange = useCallback((next: ProductAttributeValue[]) => {
+    setAttributes(next);
+  }, []);
 
   // Если приходит initial асинхронно (edit-flow), синхронизируем
   useEffect(() => {
@@ -76,6 +86,7 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
         descriptionRu || descriptionUz
           ? { ru: descriptionRu || undefined, uz: descriptionUz || undefined }
           : undefined,
+      attributes,
     };
     await onSubmit(payload);
   };
@@ -124,7 +135,9 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
               >
                 <option value="">— выбрать —</option>
                 {catOptions.map((c) => (
-                  <option key={c.id} value={c.id}>{c.label}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -136,7 +149,9 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
               >
                 <option value="">— без бренда —</option>
                 {brands.data?.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -186,6 +201,28 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
 
       <Card>
         <CardContent className="space-y-4 p-6">
+          <div>
+            <h2 className="font-semibold">Характеристики</h2>
+            <p className="text-sm text-muted-foreground">
+              Зависят от выбранной категории. Заполняйте обязательные (отмечены *) — по ним
+              покупатели фильтруют товары.
+            </p>
+          </div>
+          {categoryId ? (
+            <ProductAttributesEditor
+              key={categoryId}
+              categoryId={categoryId}
+              initial={initial?.attributes}
+              onChange={handleAttributesChange}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Сначала выберите категорию выше.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4 p-6">
           <h2 className="font-semibold">Описание</h2>
           <Field label="Описание (RU)">
             <textarea
@@ -213,7 +250,15 @@ export function ProductForm({ initial, busy, submitLabel, onSubmit }: Props) {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
       <Label>
