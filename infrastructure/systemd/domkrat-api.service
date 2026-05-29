@@ -5,9 +5,9 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=domkrat
-Group=domkrat
-WorkingDirectory=/opt/domkrat/apps/api
+User=samandar
+Group=samandar
+WorkingDirectory=/var/www/domkrat/apps/api
 EnvironmentFile=/etc/domkrat/api.env
 ExecStart=/usr/bin/node dist/main.js
 Restart=always

@@ -171,10 +171,18 @@ sudo cloudflared tunnel login
 sudo cloudflared tunnel create domkrat
 # → выведет UUID, например 12345678-...
 
-# DNS routes (Cloudflare сам создаст CNAME записи)
-for h in domkrat.uz api.domkrat.uz merchant.domkrat.uz admin.domkrat.uz cdn.domkrat.uz; do
+# DNS routes (Cloudflare сам создаст CNAME записи).
+# Прогнать для каждого домена, который уже добавлен в Cloudflare account.
+# Сейчас тестовый домен — domcrat.uz (через «c»); domkrat.uz добавим позже.
+for h in domcrat.uz www.domcrat.uz api.domcrat.uz merchant.domcrat.uz admin.domcrat.uz cdn.domcrat.uz; do
   sudo cloudflared tunnel route dns domkrat $h
 done
+# Позже, когда зона domkrat.uz появится в Cloudflare:
+# for h in domkrat.uz www.domkrat.uz api.domkrat.uz merchant.domkrat.uz admin.domkrat.uz cdn.domkrat.uz; do
+#   sudo cloudflared tunnel route dns domkrat $h
+# done
+
+# Пошаговый runbook именно для этого сервера и обоих доменов — docs/11-LAUNCH-DOMCRAT.md
 
 # Конфиг
 sudo mkdir -p /etc/cloudflared
@@ -231,6 +239,7 @@ sudo systemctl restart domkrat-api domkrat-web domkrat-merchant domkrat-admin
 ```
 
 Хранить 30 дней + копию в S3/Backblaze:
+
 ```bash
 aws s3 cp /opt/domkrat/backups/ s3://domkrat-backups/ --recursive --include "*.sql.gz"
 ```
@@ -269,10 +278,10 @@ aws s3 cp /opt/domkrat/backups/ s3://domkrat-backups/ --recursive --include "*.s
 
 ## Troubleshooting
 
-| Симптом | Причина / решение |
-|---|---|
-| `502 Bad Gateway` на домене | Сервис упал, проверь `journalctl -u domkrat-api -n 50` |
-| `cloudflared` не подключается | Проверь UUID в config.yml совпадает с `cloudflared tunnel list` |
-| Картинки не открываются | Bucket policy `s3:GetObject` для `product/*` (StorageService это делает автоматически при старте) |
-| Поиск отдаёт 0 | Запусти `/search/rebuild` после первого деплоя или больших изменений |
-| Заказы не оплачиваются | Проверь `PAYMENT_PROVIDERS` в api.env; для тестов оставь `mock,cod` |
+| Симптом                       | Причина / решение                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `502 Bad Gateway` на домене   | Сервис упал, проверь `journalctl -u domkrat-api -n 50`                                            |
+| `cloudflared` не подключается | Проверь UUID в config.yml совпадает с `cloudflared tunnel list`                                   |
+| Картинки не открываются       | Bucket policy `s3:GetObject` для `product/*` (StorageService это делает автоматически при старте) |
+| Поиск отдаёт 0                | Запусти `/search/rebuild` после первого деплоя или больших изменений                              |
+| Заказы не оплачиваются        | Проверь `PAYMENT_PROVIDERS` в api.env; для тестов оставь `mock,cod`                               |

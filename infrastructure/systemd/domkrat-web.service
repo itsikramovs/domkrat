@@ -4,10 +4,11 @@ After=network.target domkrat-api.service
 
 [Service]
 Type=simple
-User=domkrat
-Group=domkrat
-WorkingDirectory=/opt/domkrat/apps/web
-EnvironmentFile=/etc/domkrat/web.env
+User=samandar
+Group=samandar
+WorkingDirectory=/var/www/domkrat/apps/web
+# Next.js сам читает apps/web/.env.production при start; этот файл опционален (префикс '-').
+EnvironmentFile=-/etc/domkrat/web.env
 ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
 Restart=always
 RestartSec=5

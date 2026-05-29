@@ -1,6 +1,14 @@
 # Cloudflare Tunnel — публикация локального сервера в интернет через Cloudflare,
 # без необходимости настраивать DNS A-записи, SSL-сертификаты и пробрасывать порты.
 #
+# Домены проекта:
+#   domcrat.uz  — тестовый/первый домен (запускаем сейчас)
+#   domkrat.uz  — основной домен (добавим в Cloudflare позже; ingress уже готов)
+#
+# Оба домена ведут на одни и те же локальные сервисы. Когда domkrat.uz будет
+# добавлен в Cloudflare account и для него выполнены DNS-routes — он заработает
+# без правки этого файла.
+#
 # Установка (Ubuntu):
 #   curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
 #   sudo dpkg -i cloudflared.deb
@@ -10,15 +18,15 @@
 #   cloudflared tunnel create domkrat
 #   # сохранит credentials в ~/.cloudflared/<UUID>.json
 #
-# DNS routes:
-#   cloudflared tunnel route dns domkrat domkrat.uz
-#   cloudflared tunnel route dns domkrat api.domkrat.uz
-#   cloudflared tunnel route dns domkrat merchant.domkrat.uz
-#   cloudflared tunnel route dns domkrat admin.domkrat.uz
-#   cloudflared tunnel route dns domkrat cdn.domkrat.uz
+# DNS routes (для каждого домена, который уже добавлен в Cloudflare):
+#   for h in domcrat.uz www.domcrat.uz api.domcrat.uz merchant.domcrat.uz admin.domcrat.uz cdn.domcrat.uz; do
+#     cloudflared tunnel route dns domkrat $h
+#   done
+#   # позже, когда domkrat.uz появится в Cloudflare — повторить с domkrat.uz
 #
 # Скопировать этот файл и заменить tunnel UUID + credentials path:
 #   sudo cp infrastructure/cloudflared/config.example.yml /etc/cloudflared/config.yml
+#   sudo sed -i 's/CHANGE_ME_TUNNEL_UUID/<UUID>/g' /etc/cloudflared/config.yml
 #
 # Запуск как сервис:
 #   sudo cloudflared service install
@@ -28,25 +36,33 @@ tunnel: CHANGE_ME_TUNNEL_UUID
 credentials-file: /root/.cloudflared/CHANGE_ME_TUNNEL_UUID.json
 
 ingress:
-  # Customer web
+  # ===== domcrat.uz (тестовый/первый домен) =====
+  - hostname: domcrat.uz
+    service: http://localhost:3000
+  - hostname: www.domcrat.uz
+    service: http://localhost:3000
+  - hostname: api.domcrat.uz
+    service: http://localhost:3001
+  - hostname: merchant.domcrat.uz
+    service: http://localhost:3002
+  # Admin — ограничить доступ через Cloudflare Access (email allowlist)
+  - hostname: admin.domcrat.uz
+    service: http://localhost:3003
+  # MinIO public (картинки товаров)
+  - hostname: cdn.domcrat.uz
+    service: http://localhost:9000
+
+  # ===== domkrat.uz (основной домен; заработает после DNS-routes) =====
   - hostname: domkrat.uz
     service: http://localhost:3000
   - hostname: www.domkrat.uz
     service: http://localhost:3000
-
-  # API
   - hostname: api.domkrat.uz
     service: http://localhost:3001
-
-  # Merchant cabinet
   - hostname: merchant.domkrat.uz
     service: http://localhost:3002
-
-  # Admin panel (доступ только по списку IP — настраивается в Cloudflare Access)
   - hostname: admin.domkrat.uz
     service: http://localhost:3003
-
-  # MinIO public (картинки товаров)
   - hostname: cdn.domkrat.uz
     service: http://localhost:9000
 

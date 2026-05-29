@@ -2,23 +2,54 @@
 
 > **Этот файл — точка входа для Claude в новой сессии.**
 > Прочитай его первым после CLAUDE.md, дальше используй ссылки.
-> Дата последнего обновления: **2026-05-28**.
+> Дата последнего обновления: **2026-05-29**.
+
+---
+
+## 0. ⚡ САМОЕ ВАЖНОЕ ДЛЯ СЛЕДУЮЩЕЙ СЕССИИ
+
+**Сайт УЖЕ развёрнут и живёт на `domcrat.uz` через Cloudflare Tunnel** (проверено 2026-05-29, все хосты HTTP 200 по HTTPS). НО запущено как **detached background-процессы (`setsid`), НЕ systemd** → переживёт выход из сессии, но **НЕ переживёт ребут сервера**.
+
+**Что сделать в первую очередь (требует `sudo` от пользователя):**
+
+1. Перевести 4 сервиса + cloudflared на **systemd** (persistence через ребут) — шаги в `docs/11-LAUNCH-DOMCRAT.md §6` + `infrastructure/systemd/`.
+2. Закрыть `admin.domcrat.uz` через **Cloudflare Access** (email allowlist).
+3. Отозвать временный Cloudflare API-токен (лежит `~/.config/cloudflare-api.token`, своё дело сделал).
+
+**Незакоммиченные правки** (на момент написания в `git status`): code-fix `StorageService` (split internal/public MinIO), все `*.env.production.example`, systemd-юниты, cloudflared-конфиг, `.gitignore`, `docs/09`, новый `docs/11-LAUNCH-DOMCRAT.md`. Секретов в трекинге нет (`.env.production*` игнорятся). **Решить: закоммитить на `master`.**
+
+Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`**.
 
 ---
 
 ## 1. Где сейчас находится проект
 
-**Стадия**: MVP функционально готов. Все ключевые пользовательские флоу работают локально на 192.168.1.8. Запуск в production — после интеграции реальных платежей/SMS/SMTP и юридического согласования.
+**Стадия**: MVP функционально готов и **развёрнут на тестовом домене `domcrat.uz`** (через «c»; основной `domkrat.uz` через «k» добавим позже — конфиги и CORS уже содержат оба). Для боевого запуска осталось интегрировать реальные платежи/SMS/SMTP и согласовать legal.
 
-### Состояние сервисов (на момент написания)
+### Состояние сервисов (LIVE на 2026-05-29)
 
 ```
-✓ API     → http://192.168.1.8:3001/api/v1/health    → {"status":"ok"}
-✓ Web     → http://192.168.1.8:3000                  → 200
-✓ API docs → http://192.168.1.8:3001/api/docs        → Swagger UI
-○ Merchant → http://192.168.1.8:3002                 → ручной старт через pnpm dev:merchant
-○ Admin    → http://192.168.1.8:3003                 → ручной старт через pnpm dev:admin
+✓ https://api.domcrat.uz/api/v1/health   → {"status":"ok"}
+✓ https://domcrat.uz  / https://www.domcrat.uz   → 200 (SSR, каталог рендерится)
+✓ https://merchant.domcrat.uz/login      → 200
+✓ https://admin.domcrat.uz               → 200
+~ https://cdn.domcrat.uz                  → 403 на root (норма MinIO; public-политика
+                                            product/* заработает после первой загрузки картинки)
 ```
+
+Локально (для отладки на сервере) те же сервисы: API :3001, web :3000, merchant :3002, admin :3003.
+
+### Как именно запущено (важные нюансы инфры)
+
+- **Туннель `02bf83d1-d3e1-43dc-89d1-a6320fce7234`** работает в **locally-managed** режиме (НЕ token-mode):
+  - креды восстановлены из connector-токена → `~/.cloudflared/<uuid>.json`;
+  - ingress (оба домена, 6 сабдоменов) → `~/.cloudflared/config.yml`;
+  - бинарь: `~/.local/bin/cloudflared` (v2026.5.2, поставлен без sudo).
+  - **Причина locally-managed**: выданный Cloudflare API-токен имеет только `Zone→DNS:Edit`, без `Account→Tunnel:Edit`, поэтому ingress через API прописать нельзя — обошёл локальным конфигом. **Следствие: вкладка Public Hostnames в дашборде Cloudflare ПУСТА — это норма, не добавлять туда хосты (конфликт с локальным конфигом).**
+- **DNS**: 6 проксируемых CNAME (`<host> → <uuid>.cfargotunnel.com`) созданы через Cloudflare API.
+- **Процессы** запущены через `setsid` (detached), логи в `/tmp/domkrat-logs/{api,web,merchant,admin,cloudflared}.log`. systemd — TODO (см. §0).
+- **Секреты на диске** (вне git, chmod 600): `~/.config/cloudflared.token` (connector), `~/.config/cloudflare-api.token` (API, отозвать после настройки), `apps/api/.env.production` + `apps/{web,merchant,admin}/.env.production[.local]`.
+- **super admin**: `super@domkrat.uz` / `Test1234!` (демо-seed — сменить перед боевым). БД засеяна полным `db:seed`: 100 товаров, 2 демо-мерчанта, справочники.
 
 ### Метрики
 
@@ -104,7 +135,7 @@
 2. **Реальный SMS-провайдер** — Eskiz API (сейчас MockSmsProvider)
 3. **Реальный SMTP** — заменить MailHog (Mailgun/SendGrid/Yandex.SMTP)
 4. **Юридическое согласование** legal pages (сейчас MVP-шаблоны)
-5. **Реальный домен** + Cloudflare Tunnel UUID + DNS routes
+5. ~~**Реальный домен** + Cloudflare Tunnel + DNS~~ ✅ СДЕЛАНО для `domcrat.uz` (см. §0/§1). Осталось: systemd-persistence, Cloudflare Access на admin, отзыв API-токена; для `domkrat.uz` — добавить зону в Cloudflare + DNS routes (см. `docs/11 §«Когда добавляем основной домен»`).
 
 ### 🟡 Желательно до запуска
 
@@ -177,6 +208,9 @@
 - ⚠️ **Главная ветка = `master`**, хотя git config указывает `main`. Используй `git push origin master`.
 - ⚠️ **Sudo требует пароль** — Claude не может ставить системные пакеты. Просить пользователя.
 - ⚠️ **Docker от группы docker** — `samandar` в группе, но claude может не иметь доступа к /var/run/docker.sock. Если `docker ps` падает с permission denied — попроси пользователя или используй `sudo docker` (с паролем).
+- ⚠️ **Туннель — locally-managed, конфиг локальный** (`~/.cloudflared/config.yml`), а НЕ в дашборде Cloudflare. Менять маршрутизацию/добавлять хосты — правкой этого файла + рестарт cloudflared, НЕ через дашборд (вкладка Public Hostnames пуста — это норма). Запуск: `~/.local/bin/cloudflared --no-autoupdate --config ~/.cloudflared/config.yml tunnel run <uuid>`.
+- ⚠️ **Сервисы запущены через `setsid` (не systemd)** — переживают выход из сессии, но НЕ ребут. Перезапуск отдельного сервиса = найти PID (`pgrep -af`), убить, заново `setsid … &` с env из `apps/<app>/.env.production`. Правильное решение — перевести на systemd (нужен sudo, см. `docs/11 §6`).
+- ⚠️ **Env фронтов вшиваются на этапе `pnpm build`** (`NEXT_PUBLIC_*`). Лежат в `apps/{web,merchant,admin}/.env.production[.local]` с URL `domcrat.uz`. Сменишь домен/канонический URL — нужно **пересобрать** фронты, иначе в бандле останется старый адрес.
 
 ### Тесты
 
@@ -233,9 +267,20 @@ pnpm type-check                   # типы всех апп
 pnpm lint                         # eslint
 pnpm build                        # production build
 
-# Деплой (на сервере)
+# Деплой (на сервере) — ПОСЛЕ перевода на systemd (нужен sudo, пока НЕ сделано)
 sudo systemctl restart domkrat-api domkrat-web domkrat-merchant domkrat-admin
 sudo journalctl -u domkrat-api -f
+
+# Текущий запуск (background / setsid — пока нет systemd)
+pgrep -af "cloudflared.*config.yml"           # жив ли туннель
+ps -eo pid,etime,cmd | grep -E "dist/main|next-server" | grep -v grep
+tail -f /tmp/domkrat-logs/cloudflared.log      # логи туннеля
+tail -f /tmp/domkrat-logs/api.log              # логи api (web/merchant/admin аналогично)
+curl -s https://api.domcrat.uz/api/v1/health   # проверка снаружи через Cloudflare
+
+# Перезапуск туннеля (если упал)
+~/.local/bin/cloudflared --no-autoupdate --config ~/.cloudflared/config.yml \
+  tunnel run 02bf83d1-d3e1-43dc-89d1-a6320fce7234 > /tmp/domkrat-logs/cloudflared.log 2>&1 &
 ```
 
 ---

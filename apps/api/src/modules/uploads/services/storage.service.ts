@@ -1,9 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Client as MinioClient } from 'minio';
 
@@ -34,11 +30,21 @@ export class StorageService implements OnModuleInit {
     const accessKey = this.config.get<string>('MINIO_ACCESS_KEY')!;
     const secretKey = this.config.get<string>('MINIO_SECRET_KEY')!;
     const internalEndpoint = this.config.get<string>('MINIO_INTERNAL_ENDPOINT', 'localhost');
+    // Внутренний клиент ходит к MinIO напрямую (127.0.0.1:9000, без TLS), а публичный —
+    // через Cloudflare (cdn.<domain>:443, TLS). Поэтому порт/SSL у них разные. Если
+    // MINIO_INTERNAL_PORT/SSL не заданы — fallback на публичные значения (dev single-host).
+    const internalPort = Number(
+      this.config.get<string>('MINIO_INTERNAL_PORT') ??
+        this.config.get<string>('MINIO_PORT', '9000'),
+    );
+    const internalUseSSL =
+      (this.config.get<string>('MINIO_INTERNAL_USE_SSL') ??
+        this.config.get<string>('MINIO_USE_SSL', 'false')) === 'true';
 
     this.internalClient = new MinioClient({
       endPoint: internalEndpoint,
-      port: this.port,
-      useSSL: this.useSSL,
+      port: internalPort,
+      useSSL: internalUseSSL,
       accessKey,
       secretKey,
     });
