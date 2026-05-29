@@ -26,6 +26,7 @@ import type { AuthenticatedUser } from '../auth/types';
 import { HoldReleaseService } from '../finance/hold-release.service';
 
 import { CreateMerchantDto } from './dto/create-merchant.dto';
+import { CreateStaffDto, SetStaffRolesDto } from './dto/create-staff.dto';
 import { AdminFinanceService } from './services/admin-finance.service';
 import { AdminMerchantsService } from './services/admin-merchants.service';
 import { AdminOrdersService } from './services/admin-orders.service';
@@ -74,6 +75,42 @@ export class AdminController {
   setUserStatus(@Param('id', ParseUUIDPipe) id: string, @Body() body: { isActive: boolean }) {
     if (typeof body.isActive !== 'boolean') throw new BadRequestException('isActive required');
     return this.users.setActive(id, body.isActive);
+  }
+
+  // ==================================================== System users (staff)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Get('staff')
+  @ApiOperation({ summary: 'Системные пользователи (сотрудники платформы)' })
+  listStaff(
+    @Query('role') role?: UserRole,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.users.listStaff({
+      role,
+      search,
+      page: page ? Number(page) : 1,
+      perPage: perPage ? Number(perPage) : 50,
+    });
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Post('staff')
+  @ApiOperation({ summary: 'Создать системного пользователя (только SUPER_ADMIN)' })
+  createStaff(@Body() dto: CreateStaffDto, @CurrentUser() admin: AuthenticatedUser) {
+    return this.users.createStaff(dto, admin.id);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN)
+  @Patch('staff/:id/roles')
+  @ApiOperation({ summary: 'Изменить роли сотрудника (только SUPER_ADMIN)' })
+  setStaffRoles(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetStaffRolesDto,
+    @CurrentUser() admin: AuthenticatedUser,
+  ) {
+    return this.users.setStaffRoles(id, dto.roles, admin.id);
   }
 
   // ============================================================ Merchants

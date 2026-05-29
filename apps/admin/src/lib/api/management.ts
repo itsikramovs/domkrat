@@ -43,7 +43,67 @@ export function useSetUserStatus() {
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       apiFetch(`/admin/users/${id}/status`, { method: 'PATCH', body: { isActive } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] });
+      qc.invalidateQueries({ queryKey: ['admin-staff'] });
+    },
+  });
+}
+
+// ====================== Системные пользователи (staff) ======================
+export type StaffRole =
+  | 'ADMIN'
+  | 'SUPER_ADMIN'
+  | 'CONTENT_MANAGER'
+  | 'SUPPORT_AGENT'
+  | 'FINANCE_MANAGER'
+  | 'WAREHOUSE_MANAGER'
+  | 'WAREHOUSE_WORKER'
+  | 'COURIER';
+
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  SUPER_ADMIN: 'Супер-админ',
+  ADMIN: 'Администратор',
+  CONTENT_MANAGER: 'Контент-менеджер',
+  SUPPORT_AGENT: 'Поддержка',
+  FINANCE_MANAGER: 'Финансы',
+  WAREHOUSE_MANAGER: 'Менеджер склада',
+  WAREHOUSE_WORKER: 'Кладовщик',
+  COURIER: 'Курьер',
+};
+
+export function useStaff(filter: { role?: string; search?: string } = {}) {
+  const t = useTok();
+  const qs = new URLSearchParams();
+  if (filter.role) qs.set('role', filter.role);
+  if (filter.search) qs.set('search', filter.search);
+  return useQuery({
+    queryKey: ['admin-staff', filter, t],
+    queryFn: () => apiFetch<Paginated<AdminUser>>(`/admin/staff?${qs.toString()}`),
+    enabled: Boolean(t),
+  });
+}
+
+export function useCreateStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      email: string;
+      password: string;
+      role: StaffRole;
+      firstName?: string;
+      lastName?: string;
+    }) => apiFetch('/admin/staff', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-staff'] }),
+  });
+}
+
+export function useSetStaffRoles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, roles }: { id: string; roles: StaffRole[] }) =>
+      apiFetch(`/admin/staff/${id}/roles`, { method: 'PATCH', body: { roles } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-staff'] }),
   });
 }
 

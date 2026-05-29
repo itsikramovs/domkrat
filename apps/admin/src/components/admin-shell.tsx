@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Star,
   Tags,
+  UserCog,
   Users,
   Wallet,
   Warehouse,
@@ -64,7 +65,13 @@ const GROUPS: Group[] = [
       { href: '/finance/withdrawals', label: 'Выводы средств', icon: Banknote },
     ],
   },
-  { title: 'Система', items: [{ href: '/system', label: 'Система', icon: Settings }] },
+  {
+    title: 'Система',
+    items: [
+      { href: '/staff', label: 'Сотрудники', icon: UserCog },
+      { href: '/system', label: 'Настройки', icon: Settings },
+    ],
+  },
 ];
 
 function isActive(pathname: string, href: string): boolean {
