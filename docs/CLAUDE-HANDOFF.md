@@ -16,13 +16,19 @@
 
 ✅ **Cloudflare (через API, 2026-05-29):** SSL/TLS mode = **Full**, **Always Use HTTPS** = On (http→https 301 работает). DNS — 6 проксируемых CNAME. Зона `domcrat.uz` id `57d795b4a4a7f86b7af698b8366ed3ef`, account `db799ee23a7f3f9d0afedf7a3a751132`. Zero Trust org уже есть: `ezozshox.cloudflareaccess.com`. Единственный участник аккаунта: `itsikramovs@yandex.ru`.
 
+✅ **GitHub подключён:** remote `git@github.com:itsikramovs/domkrat.git` (SSH deploy-ключ `~/.ssh/domkrat_deploy`, конфиг в `~/.ssh/config`). `master` запушен, отслеживание настроено — пушу сам.
+
+✅ **Реальная почта (mail.ru) работает:** `EMAIL_TRANSPORT=smtp`, `smtp.mail.ru:465` SSL, `noreply@domcrat.uz` (креды в `apps/api/.env.production`, gitignored). Code-fix: `email.service.ts` выводит `secure` из порта (465=SSL) + `SMTP_SECURE`. Проверено живьём — регистрация шлёт реальное письмо с кодом. Регистрация юзеров на домене теперь рабочая.
+
+✅ **Создание мерчантов из админки** (`feat(admin)`): `POST /admin/merchants` создаёт владельца (User+роль MERCHANT) + компанию (Merchant, ACTIVE) в транзакции, авто-slug, форма в `admin.domcrat.uz/merchants` («+ Создать мерчанта»). Проверено: владелец логинится, мерчант ACTIVE в списке. Раньше создания мерчантов в приложении НЕ было вообще. (Тестовый мерчант `AvtoZap Toshkent` / `seller1@domcrat.uz` создан при проверке — можно удалить/оставить.)
+
 **Остаётся ручное / по решению пользователя:**
 
-1. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить** (админка открыта по HTTPS). Можно включить в любой момент: у меня есть токен с `Access:Edit` → создам Access-app + Allow-policy на нужный email по команде; либо вы сами в Zero Trust → Access → Applications.
-2. **Отозвать API-токены** (только дашборд — user-level token API недоступен): `dash.cloudflare.com → My Profile → API Tokens`. Старый DNS-only токен — отозвать (не нужен). Новый широкий токен (`~/.config/cloudflare-api.token`, права Access/Tunnel/DNS/Zone) — оставить, если планируете мои дальнейшие правки в CF (Access, DNS для `domkrat.uz`), иначе тоже отозвать.
-3. **Git remote отсутствует** (`git remote -v` пусто) — `push` невозможен, пока не создадите репозиторий на GitHub/др. и не добавите `origin`. Все коммиты пока только локальные.
+1. **Визуальная QA вёрстки** — Playwright+Chromium поставлены в `~/pw-qa` (скрипт `~/pw-qa/shot.js` снимает моб. скриншоты 390px + детект overflow). Не хватает системных либ Chromium → **нужен один sudo**: `cd /home/samandar/pw-qa && sudo npx playwright install-deps chromium`. После этого скриншоты снимаю сам. Код-аудит вёрстки уже пройден — красных флагов нет.
+2. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить**. Включается по команде (токен с `Access:Edit` есть).
+3. **Отозвать API-токены** (только дашборд): старый DNS-only — отозвать; новый широкий (`~/.config/cloudflare-api.token`) — оставить, пока нужны мои правки в CF. **Решено отложить (приоритет — рабочий маркетплейс).**
 
-**Закоммичено** на `master`: `dc6b0ba` (deploy wiring) + `e7c0666` (handoff sync) + `7726e5e` (user-systemd units + docs). Секретов в трекинге нет.
+**Закоммичено + запушено** на `master` (github): `dc6b0ba` deploy, `e7c0666` handoff, `7726e5e` user-systemd, `84009ea` fix(email), `5914f59` feat(admin) create merchants.
 
 Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`** (§6a — user-systemd).
 
