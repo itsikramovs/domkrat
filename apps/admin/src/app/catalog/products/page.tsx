@@ -1,5 +1,7 @@
 'use client';
 
+import { Pencil, Plus } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -12,7 +14,7 @@ import { useModerateProduct, useModerationProducts } from '@/lib/api/management'
 import { ApiHttpError } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 
-const TABS = ['PENDING_REVIEW', 'ACTIVE', 'REJECTED', ''];
+const TABS = ['PENDING_REVIEW', 'DRAFT', 'ACTIVE', 'REJECTED', ''];
 
 export default function ProductModerationPage() {
   return (
@@ -40,7 +42,14 @@ function Inner() {
 
   return (
     <div className="container py-8 space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Модерация товаров</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold tracking-tight text-white">Товары</h1>
+        <Button asChild>
+          <Link href="/catalog/products/new">
+            <Plus className="h-4 w-4" /> Создать товар
+          </Link>
+        </Button>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {TABS.map((s) => (
@@ -72,9 +81,11 @@ function Inner() {
           {list.map((p) => (
             <Card key={p.id}>
               <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                <div>
+                <Link href={`/catalog/products/${p.id}`} className="group min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.name?.ru ?? p.sku}</span>
+                    <span className="font-medium text-white group-hover:underline">
+                      {p.name?.ru ?? p.sku}
+                    </span>
                     <Badge
                       variant={
                         p.status === 'ACTIVE'
@@ -90,30 +101,33 @@ function Inner() {
                   <div className="text-xs text-muted-foreground">
                     {p.sku} · {formatPrice(p.price)} · {p.merchant?.brandName ?? ''}
                   </div>
+                </Link>
+                <div className="flex gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/catalog/products/${p.id}`}>
+                      <Pencil className="h-3.5 w-3.5" /> Изменить
+                    </Link>
+                  </Button>
+                  {p.status !== 'ACTIVE' ? (
+                    <Button
+                      size="sm"
+                      onClick={() => act(p.id, 'ACTIVE')}
+                      disabled={moderate.isPending}
+                    >
+                      Опубликовать
+                    </Button>
+                  ) : null}
+                  {p.status !== 'REJECTED' ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => act(p.id, 'REJECTED')}
+                      disabled={moderate.isPending}
+                    >
+                      Отклонить
+                    </Button>
+                  ) : null}
                 </div>
-                {p.status !== 'ACTIVE' || status !== 'ACTIVE' ? (
-                  <div className="flex gap-2">
-                    {p.status !== 'ACTIVE' ? (
-                      <Button
-                        size="sm"
-                        onClick={() => act(p.id, 'ACTIVE')}
-                        disabled={moderate.isPending}
-                      >
-                        Опубликовать
-                      </Button>
-                    ) : null}
-                    {p.status !== 'REJECTED' ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => act(p.id, 'REJECTED')}
-                        disabled={moderate.isPending}
-                      >
-                        Отклонить
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
               </CardContent>
             </Card>
           ))}
