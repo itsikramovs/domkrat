@@ -11,10 +11,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  useAdminAlerts,
   useAdminQuickCell,
+  useAdminReceipts,
   useAdminWarehouseCells,
   useAdminWarehouses,
   useCreatePlatformWarehouse,
+  useRunScan,
 } from '@/lib/api/inventory';
 import { ApiHttpError } from '@/lib/api-client';
 
@@ -76,6 +79,8 @@ function WarehousesInner() {
           </button>
         ))}
       </div>
+
+      <InventoryOversight />
 
       {showForm ? (
         <Card>
@@ -207,6 +212,83 @@ function Cells({ warehouseId }: { warehouseId: string }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function InventoryOversight() {
+  const alerts = useAdminAlerts();
+  const receipts = useAdminReceipts();
+  const scan = useRunScan();
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardContent className="p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-semibold">Алерты остатков ({alerts.data?.length ?? 0})</h2>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={scan.isPending}
+              onClick={async () => {
+                try {
+                  await scan.mutateAsync();
+                  toast.success('Скан запущен');
+                } catch {
+                  toast.error('Ошибка');
+                }
+              }}
+            >
+              Запустить скан
+            </Button>
+          </div>
+          {!alerts.data?.length ? (
+            <div className="text-sm text-muted-foreground">Активных алертов нет.</div>
+          ) : (
+            <div className="space-y-1 text-sm">
+              {alerts.data.slice(0, 12).map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between border-b py-1 last:border-0"
+                >
+                  <span>
+                    <Badge variant={a.severity === 'CRITICAL' ? 'destructive' : 'warning'}>
+                      {a.alertType}
+                    </Badge>{' '}
+                    {a.product.sku} · {a.merchant.brandName}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <h2 className="mb-2 font-semibold">Последние приёмки</h2>
+          {!receipts.data?.length ? (
+            <div className="text-sm text-muted-foreground">Приёмок нет.</div>
+          ) : (
+            <div className="space-y-1 text-sm">
+              {receipts.data.slice(0, 12).map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between border-b py-1 last:border-0"
+                >
+                  <span>
+                    {r.receiptNumber} · {r.merchant?.brandName ?? '—'}
+                  </span>
+                  <Badge variant={r.status === 'COMPLETED' ? 'success' : 'secondary'}>
+                    {r.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

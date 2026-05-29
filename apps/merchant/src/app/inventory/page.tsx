@@ -1,9 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useBalances, useInventorySummary, useMovements } from '@/lib/api/inventory';
+import {
+  useAlertAction,
+  useAlerts,
+  useBalances,
+  useInventorySummary,
+  useMovements,
+} from '@/lib/api/inventory';
 import { pickLocale } from '@/lib/utils';
 
 const MOVEMENT_LABELS: Record<string, string> = {
@@ -40,6 +48,8 @@ export default function InventoryPage() {
           accent={!!s?.lowStockCount}
         />
       </div>
+
+      <AlertsSection />
 
       <Card>
         <CardContent className="p-4">
@@ -168,5 +178,68 @@ function Toggle({
     >
       {children}
     </button>
+  );
+}
+
+function AlertsSection() {
+  const alerts = useAlerts();
+  const resolve = useAlertAction('resolve');
+  const dismiss = useAlertAction('dismiss');
+  if (!alerts.data?.length) return null;
+
+  const sevClass = (s: string) =>
+    s === 'CRITICAL'
+      ? 'border-sale/40 bg-sale/5'
+      : s === 'WARNING'
+        ? 'border-warning/40 bg-warning/5'
+        : 'border-border';
+
+  const act = async (fn: () => Promise<unknown>, ok: string) => {
+    try {
+      await fn();
+      toast.success(ok);
+    } catch {
+      toast.error('Ошибка');
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <h2 className="mb-3 font-semibold">Алерты ({alerts.data.length})</h2>
+        <div className="space-y-2">
+          {alerts.data.map((a) => (
+            <div
+              key={a.id}
+              className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 ${sevClass(a.severity)}`}
+            >
+              <div className="text-sm">
+                <span className="font-medium">{pickLocale(a.message)}</span>
+                <span className="text-muted-foreground">
+                  {' '}
+                  · {pickLocale(a.product.name)} ({a.product.sku})
+                </span>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => act(() => resolve.mutateAsync(a.id), 'Решено')}
+                >
+                  Решено
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => act(() => dismiss.mutateAsync(a.id), 'Скрыто')}
+                >
+                  Скрыть
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

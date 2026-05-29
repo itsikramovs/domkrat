@@ -63,3 +63,49 @@ export function useAdminQuickCell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-wh-cells'] }),
   });
 }
+
+export interface AdminAlert {
+  id: string;
+  alertType: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  message: MultiLang;
+  product: { sku: string; name: MultiLang };
+  merchant: { brandName: string };
+}
+
+export interface AdminReceipt {
+  id: string;
+  receiptNumber: string;
+  status: string;
+  totalQuantity: number;
+  createdAt: string;
+  warehouse: { code: string } | null;
+  merchant: { brandName: string } | null;
+  _count?: { items: number };
+}
+
+export function useAdminAlerts() {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['admin-alerts', t],
+    queryFn: () => apiFetch<AdminAlert[]>('/admin/inventory/alerts'),
+    enabled: Boolean(t),
+  });
+}
+
+export function useAdminReceipts() {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['admin-receipts', t],
+    queryFn: () => apiFetch<AdminReceipt[]>('/admin/inventory/receipts'),
+    enabled: Boolean(t),
+  });
+}
+
+export function useRunScan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch('/admin/inventory/alerts/scan', { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-alerts'] }),
+  });
+}

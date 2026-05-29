@@ -52,6 +52,20 @@ export class ReceiptsService {
     });
   }
 
+  /** Админ-обзор: приёмки всех мерчантов. */
+  listAll(filter: { status?: ReceiptStatus }) {
+    return this.prisma.stockReceipt.findMany({
+      where: { ...(filter.status ? { status: filter.status } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        warehouse: { select: { code: true, name: true } },
+        merchant: { select: { brandName: true } },
+        _count: { select: { items: true } },
+      },
+    });
+  }
+
   async get(id: string, merchantId: string) {
     const r = await this.prisma.stockReceipt.findUnique({
       where: { id },

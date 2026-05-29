@@ -226,3 +226,45 @@ export function useMovements() {
     enabled: Boolean(t),
   });
 }
+
+// ---------------- Алерты ----------------
+export interface InventoryAlert {
+  id: string;
+  alertType: string;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  message: MultiLangText;
+  createdAt: string;
+  product: { sku: string; name: MultiLangText };
+}
+
+export function useAlerts() {
+  const t = tok();
+  return useQuery({
+    queryKey: ['inv', 'alerts', t],
+    queryFn: () => apiFetch<InventoryAlert[]>('/merchant/inventory/alerts'),
+    enabled: Boolean(t),
+  });
+}
+
+export function useAlertAction(action: 'resolve' | 'dismiss') {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch(`/merchant/inventory/alerts/${id}/${action}`, { method: 'POST', body: {} }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inv', 'alerts'] }),
+  });
+}
+
+// ---------------- Трансфер между ячейками ----------------
+export function useTransfer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: {
+      productId: string;
+      fromCellId: string;
+      toCellId: string;
+      quantity: number;
+    }) => apiFetch('/merchant/inventory/transfer', { method: 'POST', body: b }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['inv'] }),
+  });
+}

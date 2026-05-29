@@ -9,12 +9,14 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ReceiptStatus, UserRole } from '@prisma/client';
+import { AlertStatus, ReceiptStatus, UserRole } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../auth/types';
+import { TransferDto } from '../dto/transfer.dto';
+import { AlertsService } from '../services/alerts.service';
 import {
   CreateReceiptDto,
   PlacementDto,
@@ -43,6 +45,7 @@ export class MerchantInventoryController {
     private readonly warehouses: WarehousesService,
     private readonly receipts: ReceiptsService,
     private readonly inventory: InventoryService,
+    private readonly alerts: AlertsService,
   ) {}
 
   // ---------------- Склады ----------------
@@ -198,6 +201,29 @@ export class MerchantInventoryController {
   @Get('inventory/movements')
   movements(@CurrentUser() u: AuthenticatedUser, @Query('productId') productId?: string) {
     return this.inventory.listMovements(this.mid(u), { productId });
+  }
+
+  @Post('inventory/transfer')
+  @ApiOperation({ summary: 'Переместить остаток между ячейками' })
+  transfer(@CurrentUser() u: AuthenticatedUser, @Body() dto: TransferDto) {
+    return this.inventory.transfer(this.mid(u), dto, u.id);
+  }
+
+  // ---------------- Алерты остатков ----------------
+  @Get('inventory/alerts')
+  @ApiOperation({ summary: 'Алерты (low-stock, залежавшийся товар)' })
+  alertsList(@CurrentUser() u: AuthenticatedUser, @Query('status') status?: AlertStatus) {
+    return this.alerts.list(this.mid(u), status ?? AlertStatus.ACTIVE);
+  }
+
+  @Post('inventory/alerts/:id/resolve')
+  resolveAlert(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.alerts.setStatus(id, this.mid(u), AlertStatus.RESOLVED, u.id);
+  }
+
+  @Post('inventory/alerts/:id/dismiss')
+  dismissAlert(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.alerts.setStatus(id, this.mid(u), AlertStatus.DISMISSED, u.id);
   }
 
   private mid(u: AuthenticatedUser): string {

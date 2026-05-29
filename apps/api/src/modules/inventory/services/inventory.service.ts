@@ -1,12 +1,76 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import type { TransferDto } from '../dto/transfer.dto';
 
 /** Запросы остатков и движений (для кабинета мерчанта и админки). */
 @Injectable()
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Перемещение остатка между ячейками. Меняется только физика (per-cell);
+   * продаваемый агрегат (cellId=null) не трогаем. Пишет StockMovement(TRANSFER).
+   */
+  async transfer(merchantId: string, dto: TransferDto, userId: string) {
+    if (dto.fromCellId === dto.toCellId) throw new BadRequestException('Ячейки совпадают');
+    const toCell = await this.prisma.warehouseCell.findUnique({
+      where: { id: dto.toCellId },
+      include: { shelf: { include: { rack: { include: { zone: true } } } } },
+    });
+    if (!toCell) throw new NotFoundException('Целевая ячейка не найдена');
+    const toWarehouseId = toCell.shelf.rack.zone.warehouseId;
+
+    return this.prisma.$transaction(async (tx) => {
+      const dec = await tx.inventoryBalance.updateMany({
+        where: {
+          productId: dto.productId,
+          merchantId,
+          cellId: dto.fromCellId,
+          quantityAvailable: { gte: dto.quantity },
+        },
+        data: { quantityAvailable: { decrement: dto.quantity } },
+      });
+      if (dec.count === 0) throw new ConflictException('Недостаточно остатка в исходной ячейке');
+
+      await tx.inventoryBalance.upsert({
+        where: {
+          productId_merchantId_cellId: {
+            productId: dto.productId,
+            merchantId,
+            cellId: dto.toCellId,
+          },
+        },
+        create: {
+          productId: dto.productId,
+          merchantId,
+          warehouseId: toWarehouseId,
+          cellId: dto.toCellId,
+          quantityAvailable: dto.quantity,
+        },
+        update: { quantityAvailable: { increment: dto.quantity } },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: dto.productId,
+          merchantId,
+          movementType: 'TRANSFER',
+          quantity: dto.quantity,
+          fromCellId: dto.fromCellId,
+          toCellId: dto.toCellId,
+          performedById: userId,
+        },
+      });
+      return { ok: true };
+    });
+  }
 
   /**
    * Остатки мерчанта. byCell=false → агрегаты (cellId null, доступно к продаже);
