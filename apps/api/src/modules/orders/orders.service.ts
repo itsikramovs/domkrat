@@ -23,6 +23,7 @@ import Decimal from 'decimal.js';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PricingService } from '../cart/pricing.service';
 import { OrderEvents, type OrderEventPayload } from '../notifications/events';
+import { PromoCodesService, type PromoEvaluation } from '../promo-codes/promo-codes.service';
 
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderNumberingService } from './order-numbering.service';
@@ -40,6 +41,7 @@ export class OrdersService {
     private readonly numbering: OrderNumberingService,
     private readonly payments: PaymentsService,
     private readonly events: EventEmitter2,
+    private readonly promoCodes: PromoCodesService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -50,7 +52,9 @@ export class OrdersService {
       include: {
         items: {
           include: {
-            product: { include: { merchant: { select: { merchantType: true, commissionRate: true } } } },
+            product: {
+              include: { merchant: { select: { merchantType: true, commissionRate: true } } },
+            },
           },
         },
       },
@@ -83,6 +87,25 @@ export class OrdersService {
 
     const orderNumber = await this.numbering.nextOrderNumber();
 
+    // Промокод: источник истины — корзина; dto.promoCode как fallback (обратная совместимость).
+    // Скидка финансируется платформой: payout/комиссия мерчанта считаются на gross (без скидки).
+    const promoCodeRaw = cart.promoCode ?? dto.promoCode;
+    let promoEvaluation: PromoEvaluation | null = null;
+    if (promoCodeRaw) {
+      promoEvaluation = await this.promoCodes.evaluate(
+        promoCodeRaw,
+        userId,
+        cart.items.map((i) => ({
+          categoryId: i.product.categoryId,
+          merchantId: i.product.merchantId,
+          lineSubtotal: new Decimal(i.product.price.toString()).times(i.quantity),
+        })),
+      );
+      if (!promoEvaluation.valid) {
+        throw new BadRequestException(promoEvaluation.message ?? 'Promo code is not valid');
+      }
+    }
+
     // Базовая стоимость доставки (TODO: брать из delivery_method_zones)
     const deliveryCost =
       dto.deliveryMethod === DeliveryMethodType.SELF_PICKUP ? new Decimal(0) : new Decimal(25000);
@@ -93,7 +116,7 @@ export class OrdersService {
         quantity: i.quantity,
         vatRate: i.product.vatRate,
       })),
-      { deliveryCost },
+      { deliveryCost, discount: promoEvaluation?.discount },
     );
 
     // Snapshot адреса
@@ -132,7 +155,7 @@ export class OrdersService {
           deliveryAddressSnapshot: addressSnapshot as unknown as Prisma.InputJsonValue,
           pickupPointId: dto.pickupPointId,
           paymentMethod: dto.paymentMethod,
-          promoCode: dto.promoCode,
+          promoCode: promoEvaluation?.code ?? null,
           customerNotes: dto.customerNotes,
           isLegalEntity: dto.isLegalEntity ?? false,
           taxId: dto.taxId,
@@ -149,7 +172,9 @@ export class OrdersService {
           (acc, i) => acc.plus(new Decimal(i.product.price.toString()).times(i.quantity)),
           new Decimal(0),
         );
-        const commissionRate = new Decimal(items[0]!.product.merchant.commissionRate?.toString() ?? '10');
+        const commissionRate = new Decimal(
+          items[0]!.product.merchant.commissionRate?.toString() ?? '10',
+        );
         const commissionAmount = subSubtotal.times(commissionRate).dividedBy(100);
         const merchantPayout = subSubtotal.minus(commissionAmount);
         const fulfillmentType =
@@ -260,8 +285,19 @@ export class OrdersService {
         },
       });
 
-      // Очищаем корзину
+      // Атомарно фиксируем использование промокода (защита от гонки за последнее использование)
+      if (promoEvaluation?.valid && promoEvaluation.promoCodeId) {
+        await this.promoCodes.recordUsage(tx, {
+          promoCodeId: promoEvaluation.promoCodeId,
+          userId,
+          orderId: orderRow.id,
+          discountAmount: promoEvaluation.discount,
+        });
+      }
+
+      // Очищаем корзину (включая снятый промокод)
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      await tx.cart.update({ where: { id: cart.id }, data: { promoCode: null } });
 
       return orderRow;
     });
@@ -423,94 +459,108 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
-    const allowed: OrderStatus[] = [OrderStatus.SHIPPED, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED];
+    const allowed: OrderStatus[] = [
+      OrderStatus.SHIPPED,
+      OrderStatus.OUT_FOR_DELIVERY,
+      OrderStatus.DELIVERED,
+    ];
     if (!allowed.includes(order.status)) {
       throw new ConflictException(`Cannot confirm receipt from ${order.status}`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      // Кредит pending_balance каждому мерчанту
-      for (const sub of order.subOrders) {
-        const payout = new Decimal(sub.merchantPayout.toString());
-        const commission = new Decimal(sub.commissionAmount.toString());
+    return this.prisma
+      .$transaction(async (tx) => {
+        // Кредит pending_balance каждому мерчанту
+        for (const sub of order.subOrders) {
+          const payout = new Decimal(sub.merchantPayout.toString());
+          const commission = new Decimal(sub.commissionAmount.toString());
 
-        const balance = await tx.merchantBalance.upsert({
-          where: { merchantId: sub.merchantId },
-          update: {},
-          create: { merchantId: sub.merchantId },
-        });
+          const balance = await tx.merchantBalance.upsert({
+            where: { merchantId: sub.merchantId },
+            update: {},
+            create: { merchantId: sub.merchantId },
+          });
 
-        const newPending = new Decimal(balance.pendingBalance.toString()).plus(payout);
-        const newTotalEarned = new Decimal(balance.totalEarned.toString()).plus(payout);
-        const newTotalCommission = new Decimal(balance.totalCommissionPaid.toString()).plus(commission);
+          const newPending = new Decimal(balance.pendingBalance.toString()).plus(payout);
+          const newTotalEarned = new Decimal(balance.totalEarned.toString()).plus(payout);
+          const newTotalCommission = new Decimal(balance.totalCommissionPaid.toString()).plus(
+            commission,
+          );
 
-        await tx.merchantBalance.update({
-          where: { merchantId: sub.merchantId },
+          await tx.merchantBalance.update({
+            where: { merchantId: sub.merchantId },
+            data: {
+              pendingBalance: newPending.toString(),
+              totalEarned: newTotalEarned.toString(),
+              totalCommissionPaid: newTotalCommission.toString(),
+            },
+          });
+
+          await tx.financialTransaction.create({
+            data: {
+              merchantId: sub.merchantId,
+              transactionType: 'SALE',
+              direction: 'CREDIT',
+              amount: payout.toString(),
+              balanceAfter: newPending.toString(),
+              referenceType: 'sub_order',
+              referenceId: sub.id,
+              description: `Sale ${sub.subOrderNumber} → pending (7d hold)`,
+            },
+          });
+
+          await tx.financialTransaction.create({
+            data: {
+              merchantId: sub.merchantId,
+              transactionType: 'COMMISSION',
+              direction: 'DEBIT',
+              amount: commission.toString(),
+              balanceAfter: newPending.toString(),
+              referenceType: 'sub_order',
+              referenceId: sub.id,
+              description: `Platform commission for ${sub.subOrderNumber}`,
+            },
+          });
+
+          await tx.orderSubOrder.update({
+            where: { id: sub.id },
+            data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
+          });
+        }
+
+        const updated = await tx.order.update({
+          where: { id: orderId },
           data: {
-            pendingBalance: newPending.toString(),
-            totalEarned: newTotalEarned.toString(),
-            totalCommissionPaid: newTotalCommission.toString(),
+            status: OrderStatus.COMPLETED,
+            completedAt: new Date(),
+            deliveredAt: order.deliveredAt ?? new Date(),
           },
         });
 
-        await tx.financialTransaction.create({
+        await tx.orderStatusHistory.create({
           data: {
-            merchantId: sub.merchantId,
-            transactionType: 'SALE',
-            direction: 'CREDIT',
-            amount: payout.toString(),
-            balanceAfter: newPending.toString(),
-            referenceType: 'sub_order',
-            referenceId: sub.id,
-            description: `Sale ${sub.subOrderNumber} → pending (7d hold)`,
+            orderId,
+            fromStatus: order.status,
+            toStatus: OrderStatus.COMPLETED,
+            changedById: userId,
+            changedByRole: 'CUSTOMER',
+            reason: 'Customer confirmed receipt — credited merchants (pending, 7d hold)',
           },
         });
 
-        await tx.financialTransaction.create({
-          data: {
-            merchantId: sub.merchantId,
-            transactionType: 'COMMISSION',
-            direction: 'DEBIT',
-            amount: commission.toString(),
-            balanceAfter: newPending.toString(),
-            referenceType: 'sub_order',
-            referenceId: sub.id,
-            description: `Platform commission for ${sub.subOrderNumber}`,
-          },
-        });
-
-        await tx.orderSubOrder.update({
-          where: { id: sub.id },
-          data: { status: OrderStatus.COMPLETED, completedAt: new Date() },
-        });
-      }
-
-      const updated = await tx.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.COMPLETED, completedAt: new Date(), deliveredAt: order.deliveredAt ?? new Date() },
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
+        this.logger.log(
+          `Order ${order.orderNumber} COMPLETED; credited ${order.subOrders.length} sub-orders to pending balances`,
+        );
+        return updated;
+      })
+      .then((result) => {
+        this.events.emit(OrderEvents.Completed, {
           orderId,
-          fromStatus: order.status,
-          toStatus: OrderStatus.COMPLETED,
-          changedById: userId,
-          changedByRole: 'CUSTOMER',
-          reason: 'Customer confirmed receipt — credited merchants (pending, 7d hold)',
-        },
+          orderNumber: order.orderNumber,
+          userId,
+        } satisfies OrderEventPayload);
+        return result;
       });
-
-      this.logger.log(`Order ${order.orderNumber} COMPLETED; credited ${order.subOrders.length} sub-orders to pending balances`);
-      return updated;
-    }).then((result) => {
-      this.events.emit(OrderEvents.Completed, {
-        orderId,
-        orderNumber: order.orderNumber,
-        userId,
-      } satisfies OrderEventPayload);
-      return result;
-    });
   }
 
   // -------------------------------------------------------------------------

@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -17,6 +8,7 @@ import type { AuthenticatedUser } from '../auth/types';
 
 import { CartService } from './cart.service';
 import { AddCartItemDto, UpdateCartItemDto } from './dto/add-cart-item.dto';
+import { ApplyPromoCodeDto } from '../promo-codes/dto/apply-promo-code.dto';
 
 @ApiTags('Cart')
 @ApiBearerAuth()
@@ -57,5 +49,17 @@ export class CartController {
   @ApiOperation({ summary: 'Очистить корзину' })
   clear(@CurrentUser() user: AuthenticatedUser) {
     return this.cart.clear(user.id);
+  }
+
+  @Post('promo')
+  @ApiOperation({ summary: 'Применить промокод' })
+  applyPromo(@CurrentUser() user: AuthenticatedUser, @Body() dto: ApplyPromoCodeDto) {
+    return this.cart.applyPromo(user.id, dto.code);
+  }
+
+  @Delete('promo')
+  @ApiOperation({ summary: 'Снять промокод' })
+  removePromo(@CurrentUser() user: AuthenticatedUser) {
+    return this.cart.removePromo(user.id);
   }
 }

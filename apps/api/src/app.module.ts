@@ -21,6 +21,7 @@ import { HealthModule } from './modules/health/health.module';
 import { MerchantAnalyticsModule } from './modules/merchant-analytics/merchant-analytics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { PromoCodesModule } from './modules/promo-codes/promo-codes.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SearchModule } from './modules/search/search.module';
@@ -69,6 +70,7 @@ import { UsersModule } from './modules/users/users.module';
     CartModule,
     UploadsModule,
     OrdersModule,
+    PromoCodesModule,
     ReturnsModule,
     ReviewsModule,
     FinanceModule,

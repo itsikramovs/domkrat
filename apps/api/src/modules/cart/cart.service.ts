@@ -1,10 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProductStatus } from '@prisma/client';
+import Decimal from 'decimal.js';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { PromoCodesService, type PromoEvaluation } from '../promo-codes/promo-codes.service';
 
 import type { AddCartItemDto, UpdateCartItemDto } from './dto/add-cart-item.dto';
 import { PricingService } from './pricing.service';
@@ -18,6 +17,7 @@ const CART_ITEMS_INCLUDE = Prisma.validator<Prisma.CartInclude>()({
         select: {
           id: true,
           merchantId: true,
+          categoryId: true,
           sku: true,
           slug: true,
           name: true,
@@ -44,6 +44,7 @@ export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricing: PricingService,
+    private readonly promoCodes: PromoCodesService,
   ) {}
 
   /** Возвращает текущую корзину пользователя (создаёт пустую если нет). */
@@ -127,6 +128,34 @@ export class CartService {
   }
 
   // -------------------------------------------------------------------------
+  /** Применить промокод к корзине. @throws {BadRequestException} если код невалиден. */
+  async applyPromo(userId: string, rawCode: string) {
+    const cart = await this.prisma.cart.findUnique({
+      where: { userId },
+      include: CART_ITEMS_INCLUDE,
+    });
+    if (!cart || cart.items.length === 0) throw new BadRequestException('Cart is empty');
+
+    const evaluation = await this.promoCodes.evaluate(rawCode, userId, this.toEvalItems(cart));
+    if (!evaluation.valid) {
+      throw new BadRequestException(evaluation.message ?? 'Promo code is not valid');
+    }
+
+    await this.prisma.cart.update({
+      where: { id: cart.id },
+      data: { promoCode: evaluation.code },
+    });
+    return this.getOrCreate(userId);
+  }
+
+  /** Снять промокод с корзины. */
+  async removePromo(userId: string) {
+    const cart = await this.getOrCreateRaw(userId);
+    await this.prisma.cart.update({ where: { id: cart.id }, data: { promoCode: null } });
+    return this.getOrCreate(userId);
+  }
+
+  // -------------------------------------------------------------------------
   private async getOrCreateRaw(userId: string) {
     const cart = await this.prisma.cart.findUnique({ where: { userId } });
     if (cart) return cart;
@@ -135,13 +164,28 @@ export class CartService {
     });
   }
 
-  private withBreakdown(cart: CartWithItems) {
+  private toEvalItems(cart: CartWithItems) {
+    return cart.items.map((i) => ({
+      categoryId: i.product.categoryId,
+      merchantId: i.product.merchantId,
+      lineSubtotal: new Decimal(i.product.price.toString()).times(i.quantity),
+    }));
+  }
+
+  private async withBreakdown(cart: CartWithItems) {
     const priceable = cart.items.map((i) => ({
       unitPrice: i.product.price,
       quantity: i.quantity,
       vatRate: i.product.vatRate,
     }));
-    const breakdown = this.pricing.calculate(priceable);
+
+    // Если в корзине лежит промокод — пересчитываем скидку (код мог истечь/исчерпаться).
+    let promo: PromoEvaluation | null = null;
+    if (cart.promoCode && cart.items.length > 0 && cart.userId) {
+      promo = await this.promoCodes.evaluate(cart.promoCode, cart.userId, this.toEvalItems(cart));
+    }
+
+    const breakdown = this.pricing.calculate(priceable, { discount: promo?.discount });
 
     return {
       id: cart.id,
@@ -150,6 +194,15 @@ export class CartService {
       expiresAt: cart.expiresAt,
       itemsCount: cart.items.reduce((n, i) => n + i.quantity, 0),
       items: cart.items,
+      promo: promo
+        ? {
+            code: promo.code,
+            valid: promo.valid,
+            reason: promo.reason ?? null,
+            message: promo.message ?? null,
+            discount: promo.discount.toString(),
+          }
+        : null,
       pricing: {
         subtotal: breakdown.subtotal.toString(),
         vatAmount: breakdown.vatAmount.toString(),
