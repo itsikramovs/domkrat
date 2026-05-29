@@ -24,10 +24,19 @@ const DELIVERY_METHODS: Array<{
   cost: string;
 }> = [
   { value: 'SELF_PICKUP', label: 'Самовывоз', hint: 'Главный склад Ташкент', cost: 'бесплатно' },
-  { value: 'PLATFORM_COURIER', label: 'Курьер по Ташкенту', hint: 'Доставка за 1 день', cost: '25 000 сум' },
+  {
+    value: 'PLATFORM_COURIER',
+    label: 'Курьер по Ташкенту',
+    hint: 'Доставка за 1 день',
+    cost: '25 000 сум',
+  },
 ];
 
-const PAYMENT_METHODS: Array<{ value: CreateOrderInput['paymentMethod']; label: string; hint: string }> = [
+const PAYMENT_METHODS: Array<{
+  value: CreateOrderInput['paymentMethod'];
+  label: string;
+  hint: string;
+}> = [
   { value: 'MOCK', label: 'Тестовая оплата (MOCK)', hint: 'Авто-успех — для проверки flow' },
   { value: 'COD', label: 'Наличными курьеру', hint: 'Оплата при получении' },
   { value: 'CLICK', label: 'Click', hint: 'Не подключён в MVP — 501' },
@@ -37,21 +46,24 @@ const PAYMENT_METHODS: Array<{ value: CreateOrderInput['paymentMethod']; label: 
 export default function CheckoutPage() {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const cart = useCart();
   const addresses = useAddresses();
   const createAddress = useCreateAddress();
   const createOrder = useCreateOrder();
   const payOrder = usePayOrder();
 
-  const [deliveryMethod, setDeliveryMethod] = useState<CreateOrderInput['deliveryMethod']>('PLATFORM_COURIER');
+  const [deliveryMethod, setDeliveryMethod] =
+    useState<CreateOrderInput['deliveryMethod']>('PLATFORM_COURIER');
   const [paymentMethod, setPaymentMethod] = useState<CreateOrderInput['paymentMethod']>('MOCK');
   const [addressId, setAddressId] = useState<string>('');
   const [notes, setNotes] = useState('');
   const [addingAddress, setAddingAddress] = useState(false);
 
   useEffect(() => {
-    if (accessToken === null) router.push('/login?next=/checkout');
-  }, [accessToken, router]);
+    // редиректим только ПОСЛЕ регидрации persist — иначе F5 выбрасывает на /login
+    if (hasHydrated && !accessToken) router.push('/login?next=/checkout');
+  }, [hasHydrated, accessToken, router]);
 
   useEffect(() => {
     if (addresses.data && !addressId) {
@@ -60,7 +72,7 @@ export default function CheckoutPage() {
     }
   }, [addresses.data, addressId]);
 
-  if (!accessToken) return null;
+  if (!hasHydrated || !accessToken) return null;
   if (cart.isLoading || addresses.isLoading) {
     return <div className="container py-12 text-center text-muted-foreground">Загрузка…</div>;
   }
@@ -116,7 +128,10 @@ export default function CheckoutPage() {
           <CardContent className="p-6 space-y-3">
             <h2 className="font-semibold">Способ доставки</h2>
             {DELIVERY_METHODS.map((m) => (
-              <label key={m.value} className="flex items-start gap-3 cursor-pointer p-3 rounded border hover:bg-accent has-[:checked]:border-primary has-[:checked]:bg-accent/50">
+              <label
+                key={m.value}
+                className="flex items-start gap-3 cursor-pointer p-3 rounded border hover:bg-accent has-[:checked]:border-primary has-[:checked]:bg-accent/50"
+              >
                 <input
                   type="radio"
                   name="delivery"
@@ -152,33 +167,33 @@ export default function CheckoutPage() {
                 ) : null}
               </div>
 
-              {!addingAddress && addresses.data && addresses.data.length > 0 ? (
-                addresses.data.map((a) => (
-                  <label
-                    key={a.id}
-                    className="flex items-start gap-3 cursor-pointer p-3 rounded border hover:bg-accent has-[:checked]:border-primary has-[:checked]:bg-accent/50"
-                  >
-                    <input
-                      type="radio"
-                      name="address"
-                      value={a.id}
-                      checked={addressId === a.id}
-                      onChange={() => setAddressId(a.id)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1 text-sm">
-                      <div className="font-medium">
-                        {a.title ? `${a.title} · ` : ''}
-                        {a.recipientName}
+              {!addingAddress && addresses.data && addresses.data.length > 0
+                ? addresses.data.map((a) => (
+                    <label
+                      key={a.id}
+                      className="flex items-start gap-3 cursor-pointer p-3 rounded border hover:bg-accent has-[:checked]:border-primary has-[:checked]:bg-accent/50"
+                    >
+                      <input
+                        type="radio"
+                        name="address"
+                        value={a.id}
+                        checked={addressId === a.id}
+                        onChange={() => setAddressId(a.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1 text-sm">
+                        <div className="font-medium">
+                          {a.title ? `${a.title} · ` : ''}
+                          {a.recipientName}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {a.city}, {a.addressLine}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{a.recipientPhone}</div>
                       </div>
-                      <div className="text-muted-foreground">
-                        {a.city}, {a.addressLine}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{a.recipientPhone}</div>
-                    </div>
-                  </label>
-                ))
-              ) : null}
+                    </label>
+                  ))
+                : null}
 
               {addingAddress || (addresses.data && addresses.data.length === 0) ? (
                 <div className="rounded-lg border bg-secondary/30 p-3">
@@ -194,15 +209,13 @@ export default function CheckoutPage() {
                       try {
                         const created = await createAddress.mutateAsync({
                           ...input,
-                          isDefault: input.isDefault ?? (addresses.data?.length === 0),
+                          isDefault: input.isDefault ?? addresses.data?.length === 0,
                         });
                         setAddressId(created.id);
                         setAddingAddress(false);
                         toast.success('Адрес добавлен');
                       } catch (error) {
-                        toast.error(
-                          error instanceof ApiHttpError ? error.body.message : 'Ошибка',
-                        );
+                        toast.error(error instanceof ApiHttpError ? error.body.message : 'Ошибка');
                       }
                     }}
                   />

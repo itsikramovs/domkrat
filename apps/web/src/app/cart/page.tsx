@@ -14,18 +14,20 @@ import { formatPrice, pickLocale } from '@/lib/utils';
 export default function CartPage() {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { data, isLoading } = useCart();
   const update = useUpdateCartItem();
   const remove = useRemoveCartItem();
 
   useEffect(() => {
-    if (accessToken === null) {
+    // редиректим только ПОСЛЕ регидрации persist — иначе F5 выбрасывает на /login
+    if (hasHydrated && !accessToken) {
       const t = setTimeout(() => router.push('/login?next=/cart'), 0);
       return () => clearTimeout(t);
     }
-  }, [accessToken, router]);
+  }, [hasHydrated, accessToken, router]);
 
-  if (!accessToken) return null;
+  if (!hasHydrated || !accessToken) return null;
 
   if (isLoading || !data) {
     return <div className="py-12 text-center text-sm text-muted-foreground">Загрузка корзины…</div>;

@@ -13,12 +13,14 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
   const pathname = usePathname();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
 
   useEffect(() => {
-    if (accessToken === null) router.push(`/login?next=${encodeURIComponent(pathname)}`);
-  }, [accessToken, router, pathname]);
+    // редиректим только ПОСЛЕ регидрации persist — иначе F5 выбрасывает на /login
+    if (hasHydrated && !accessToken) router.push(`/login?next=${encodeURIComponent(pathname)}`);
+  }, [hasHydrated, accessToken, router, pathname]);
 
-  if (!accessToken) return null;
+  if (!hasHydrated || !accessToken) return null;
 
   return <AccountShell pathname={pathname}>{children}</AccountShell>;
 }

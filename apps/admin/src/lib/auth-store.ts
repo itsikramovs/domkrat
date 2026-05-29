@@ -17,13 +17,15 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   user: AuthUser | null;
+  /** false до завершения регидрации persist из localStorage; гард не редиректит, пока false */
+  hasHydrated: boolean;
   setTokens: (data: { accessToken: string; refreshToken: string; user: AuthUser }) => void;
   clear: () => void;
   refresh: () => Promise<boolean>;
+  setHasHydrated: (v: boolean) => void;
 }
 
-const PUBLIC_API_URL =
-  process.env['NEXT_PUBLIC_API_URL'] ?? 'http://192.168.1.8:3001/api/v1';
+const PUBLIC_API_URL = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://192.168.1.8:3001/api/v1';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -31,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       user: null,
+      hasHydrated: false,
       setTokens: (data) =>
         set({
           accessToken: data.accessToken,
@@ -70,11 +73,20 @@ export const useAuthStore = create<AuthState>()(
           return false;
         }
       },
+      setHasHydrated: (v) => set({ hasHydrated: v }),
     }),
     {
       name: 'domkrat-admin-auth',
-      // persist tokens + user в localStorage. Для prod лучше httpOnly cookie,
+      // Персистим только данные (не hasHydrated). Для prod лучше httpOnly cookie,
       // но для MVP без BFF — приемлемо.
+      partialize: (s) => ({
+        accessToken: s.accessToken,
+        refreshToken: s.refreshToken,
+        user: s.user,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     },
   ),
 );
