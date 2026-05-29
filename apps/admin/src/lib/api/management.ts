@@ -337,6 +337,77 @@ export function useDeleteAttribute() {
   });
 }
 
+// ============================ Баннеры ============================
+export type BannerPosition = 'HOME_MAIN' | 'HOME_SECONDARY' | 'CATEGORY_TOP' | 'SIDEBAR';
+
+export const BANNER_POSITION_LABELS: Record<BannerPosition, string> = {
+  HOME_MAIN: 'Главная — основной',
+  HOME_SECONDARY: 'Главная — второстепенный',
+  CATEGORY_TOP: 'Верх категории',
+  SIDEBAR: 'Боковая панель',
+};
+
+export interface AdminBanner {
+  id: string;
+  title: ML;
+  subtitle: ML | null;
+  imageUrlDesktop: string;
+  imageUrlMobile: string | null;
+  linkUrl: string | null;
+  position: BannerPosition;
+  categoryId: string | null;
+  sortOrder: number;
+  validFrom: string;
+  validUntil: string | null;
+  isActive: boolean;
+  clickCount: number;
+  viewCount: number;
+  category?: { id: string; slug: string; name: ML } | null;
+}
+
+export function useAdminBanners() {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-banners', t],
+    queryFn: () => apiFetch<AdminBanner[]>('/admin/banners'),
+    enabled: Boolean(t),
+  });
+}
+
+export function useSaveBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: Record<string, unknown> }) =>
+      id
+        ? apiFetch(`/admin/banners/${id}`, { method: 'PATCH', body })
+        : apiFetch('/admin/banners', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-banners'] }),
+  });
+}
+
+export function useDeleteBanner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/banners/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-banners'] }),
+  });
+}
+
+/** Presign + PUT в MinIO. Возвращает публичный URL загруженной картинки баннера. */
+export async function uploadBannerImage(file: File): Promise<string> {
+  const presign = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
+    '/uploads/presign-banner-image',
+    { method: 'POST', body: { contentType: file.type, filename: file.name } },
+  );
+  const put = await fetch(presign.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  });
+  if (!put.ok) throw new Error(`Upload failed: ${put.status}`);
+  return presign.publicUrl;
+}
+
 // ============================ Модерация товаров ============================
 export interface AdminProduct {
   id: string;

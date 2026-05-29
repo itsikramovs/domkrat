@@ -4,6 +4,7 @@ import {
   Award,
   Banknote,
   Contact,
+  GalleryHorizontalEnd,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -58,6 +59,10 @@ const GROUPS: Group[] = [
       { href: '/customers', label: 'Клиенты', icon: Contact },
       { href: '/users', label: 'Пользователи', icon: Users },
     ],
+  },
+  {
+    title: 'Маркетинг',
+    items: [{ href: '/banners', label: 'Баннеры', icon: GalleryHorizontalEnd }],
   },
   { title: 'Склад', items: [{ href: '/warehouses', label: 'Склады', icon: Warehouse }] },
   {

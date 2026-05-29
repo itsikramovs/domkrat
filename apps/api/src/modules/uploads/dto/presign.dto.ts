@@ -30,3 +30,15 @@ export class PresignProductImageDto {
   @Matches(/^[\w.\-()\s]{1,200}$/)
   filename!: string;
 }
+
+export class PresignBannerImageDto {
+  @ApiProperty({ enum: SUPPORTED_MIMES })
+  @IsString()
+  @IsIn(SUPPORTED_MIMES)
+  contentType!: string;
+
+  @ApiProperty({ example: 'banner.jpg' })
+  @IsString()
+  @Matches(/^[\w.\-()\s]{1,200}$/)
+  filename!: string;
+}

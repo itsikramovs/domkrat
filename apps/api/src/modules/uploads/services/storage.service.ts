@@ -66,7 +66,7 @@ export class StorageService implements OnModuleInit {
         await this.internalClient.makeBucket(this.bucket, 'us-east-1');
         this.logger.log(`Created bucket ${this.bucket}`);
       }
-      // Публичная политика для product/* — readable всем (картинки витрины)
+      // Публичная политика для product/* и banner/* — readable всем (картинки витрины)
       const policy = {
         Version: '2012-10-17',
         Statement: [
@@ -74,7 +74,10 @@ export class StorageService implements OnModuleInit {
             Effect: 'Allow',
             Principal: { AWS: ['*'] },
             Action: ['s3:GetObject'],
-            Resource: [`arn:aws:s3:::${this.bucket}/product/*`],
+            Resource: [
+              `arn:aws:s3:::${this.bucket}/product/*`,
+              `arn:aws:s3:::${this.bucket}/banner/*`,
+            ],
           },
         ],
       };
@@ -96,6 +99,21 @@ export class StorageService implements OnModuleInit {
   }): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
     const ext = params.extension.replace(/^\.+/, '').toLowerCase();
     const objectKey = `product/${params.productId}/${randomUUID()}.${ext}`;
+    const uploadUrl = await this.publicClient.presignedPutObject(this.bucket, objectKey, 60 * 10);
+    return {
+      uploadUrl,
+      objectKey,
+      publicUrl: this.buildPublicUrl(objectKey),
+    };
+  }
+
+  /** Presigned PUT-URL для загрузки изображения баннера (objectKey banner/<uuid>.<ext>). */
+  async presignBannerImage(params: {
+    contentType: string;
+    extension: string;
+  }): Promise<{ uploadUrl: string; objectKey: string; publicUrl: string }> {
+    const ext = params.extension.replace(/^\.+/, '').toLowerCase();
+    const objectKey = `banner/${randomUUID()}.${ext}`;
     const uploadUrl = await this.publicClient.presignedPutObject(this.bucket, objectKey, 60 * 10);
     return {
       uploadUrl,
