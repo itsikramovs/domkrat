@@ -337,6 +337,71 @@ export function useDeleteAttribute() {
   });
 }
 
+// ============================ Промокоды ============================
+export type PromoDiscountType = 'PERCENTAGE' | 'FIXED';
+
+export interface AdminPromoCode {
+  id: string;
+  code: string;
+  description: ML | null;
+  discountType: PromoDiscountType;
+  discountValue: string;
+  maxDiscountAmount: string | null;
+  minOrderAmount: string | null;
+  usageLimit: number | null;
+  usageCount: number;
+  perUserLimit: number | null;
+  validFrom: string;
+  validUntil: string;
+  isActive: boolean;
+  applicableCategories: string[];
+  applicableMerchants: string[];
+  _count?: { usages: number };
+}
+
+export function useAdminPromoCodes(search?: string) {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-promo-codes', search, t],
+    queryFn: () =>
+      apiFetch<Paginated<AdminPromoCode>>(
+        `/admin/promo-codes?${new URLSearchParams(search ? { search } : {}).toString()}`,
+      ),
+    enabled: Boolean(t),
+  });
+}
+
+export function useSavePromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: Record<string, unknown> }) =>
+      id
+        ? apiFetch(`/admin/promo-codes/${id}`, { method: 'PATCH', body })
+        : apiFetch('/admin/promo-codes', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-promo-codes'] }),
+  });
+}
+
+export function useDeletePromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/promo-codes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-promo-codes'] }),
+  });
+}
+
+export function useSetMerchantCommission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, commissionRate }: { id: string; commissionRate: number }) =>
+      apiFetch(`/admin/merchants/${id}/commission`, {
+        method: 'PATCH',
+        body: { commissionRate },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-merchants'] }),
+  });
+}
+
 // ============================ Аналитика платформы ============================
 export interface PlatformAnalytics {
   rangeDays: number;

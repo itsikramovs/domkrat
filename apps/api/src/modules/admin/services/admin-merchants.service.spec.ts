@@ -115,3 +115,30 @@ describe('AdminMerchantsService.create', () => {
     );
   });
 });
+
+describe('AdminMerchantsService.setCommission', () => {
+  let prisma: DeepMockProxy<PrismaService>;
+  let service: AdminMerchantsService;
+
+  beforeEach(() => {
+    prisma = mockDeep<PrismaService>();
+    service = new AdminMerchantsService(prisma, mockDeep<PasswordService>());
+  });
+
+  it('отклоняет ставку вне диапазона 0..100', async () => {
+    await expect(service.setCommission('m1', 150)).rejects.toThrow();
+    await expect(service.setCommission('m1', -1)).rejects.toThrow();
+    expect(prisma.merchant.update).not.toHaveBeenCalled();
+  });
+
+  it('обновляет ставку валидного мерчанта', async () => {
+    prisma.merchant.findUnique.mockResolvedValue({ id: 'm1' } as never);
+    prisma.merchant.update.mockResolvedValue({ id: 'm1', commissionRate: '12.5' } as never);
+
+    await service.setCommission('m1', 12.5);
+
+    expect(prisma.merchant.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'm1' }, data: { commissionRate: '12.5' } }),
+    );
+  });
+});

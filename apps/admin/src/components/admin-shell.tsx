@@ -17,6 +17,7 @@ import {
   ShoppingBag,
   Star,
   Tags,
+  Ticket,
   UserCog,
   Users,
   Wallet,
@@ -69,7 +70,10 @@ const GROUPS: Group[] = [
   },
   {
     title: 'Маркетинг',
-    items: [{ href: '/banners', label: 'Баннеры', icon: GalleryHorizontalEnd }],
+    items: [
+      { href: '/banners', label: 'Баннеры', icon: GalleryHorizontalEnd },
+      { href: '/monetization', label: 'Монетизация', icon: Ticket },
+    ],
   },
   { title: 'Склад', items: [{ href: '/warehouses', label: 'Склады', icon: Warehouse }] },
   {

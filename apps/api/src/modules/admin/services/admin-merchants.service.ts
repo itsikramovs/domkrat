@@ -158,6 +158,20 @@ export class AdminMerchantsService {
     return m;
   }
 
+  /** Устанавливает ставку комиссии мерчанта (%). Эта ставка реально применяется при расчёте заказа. */
+  async setCommission(id: string, commissionRate: number) {
+    if (commissionRate < 0 || commissionRate > 100) {
+      throw new BadRequestException('Commission rate must be between 0 and 100');
+    }
+    const m = await this.prisma.merchant.findUnique({ where: { id } });
+    if (!m) throw new NotFoundException('Merchant not found');
+    return this.prisma.merchant.update({
+      where: { id },
+      data: { commissionRate: commissionRate.toString() },
+      select: { id: true, brandName: true, commissionRate: true },
+    });
+  }
+
   async approve(id: string, verifiedById: string, notes?: string) {
     const m = await this.prisma.merchant.findUnique({ where: { id } });
     if (!m) throw new NotFoundException('Merchant not found');

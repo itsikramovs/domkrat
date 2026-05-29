@@ -183,6 +183,19 @@ export class AdminController {
     return this.merchants.get(id);
   }
 
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.FINANCE_MANAGER)
+  @Patch('merchants/:id/commission')
+  @ApiOperation({ summary: 'Установить ставку комиссии мерчанта (%)' })
+  setMerchantCommission(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { commissionRate: number },
+  ) {
+    if (typeof body.commissionRate !== 'number') {
+      throw new BadRequestException('commissionRate must be a number');
+    }
+    return this.merchants.setCommission(id, body.commissionRate);
+  }
+
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @Post('merchants/:id/approve')
   @ApiOperation({ summary: 'Одобрить (PENDING → ACTIVE)' })

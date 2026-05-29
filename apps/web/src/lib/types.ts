@@ -97,6 +97,13 @@ export interface Cart {
   currency: string;
   itemsCount: number;
   items: CartItem[];
+  promo: {
+    code: string;
+    valid: boolean;
+    reason: string | null;
+    message: string | null;
+    discount: string;
+  } | null;
   pricing: {
     subtotal: string;
     vatAmount: string;

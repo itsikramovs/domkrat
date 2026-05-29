@@ -1,15 +1,24 @@
 'use client';
 
-import { Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
+import { Minus, Plus, ShoppingBag, Tag, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCart, useRemoveCartItem, useUpdateCartItem } from '@/lib/api/cart';
+import {
+  useApplyPromo,
+  useCart,
+  useRemoveCartItem,
+  useRemovePromo,
+  useUpdateCartItem,
+} from '@/lib/api/cart';
 import { useAuthStore } from '@/lib/auth-store';
+import { ApiHttpError } from '@/lib/api-client';
 import { formatPrice, pickLocale } from '@/lib/utils';
+import type { Cart } from '@/lib/types';
 
 export default function CartPage() {
   const router = useRouter();
@@ -117,6 +126,8 @@ export default function CartPage() {
             </CardContent>
           </Card>
         ))}
+
+        <PromoBox cart={data} />
       </div>
 
       {/* Desktop sticky summary */}
@@ -126,7 +137,9 @@ export default function CartPage() {
             <h2 className="font-semibold">Итого</h2>
             <Row label="Товары" value={formatPrice(data.pricing.subtotal)} />
             <Row label="НДС (включён)" value={formatPrice(data.pricing.vatAmount)} muted />
-            <Row label="Скидка" value={`-${formatPrice(data.pricing.discount)}`} muted />
+            {Number(data.pricing.discount) > 0 ? (
+              <Row label="Скидка" value={`-${formatPrice(data.pricing.discount)}`} muted />
+            ) : null}
             <div className="border-t pt-3">
               <Row label="К оплате" value={formatPrice(data.pricing.total)} large />
               <p className="mt-1 text-xs text-muted-foreground">
@@ -157,6 +170,84 @@ export default function CartPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+function PromoBox({ cart }: { cart: Cart }) {
+  const apply = useApplyPromo();
+  const remove = useRemovePromo();
+  const [code, setCode] = useState('');
+  const active = cart.promo?.valid ? cart.promo : null;
+
+  async function onApply(e: React.FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    try {
+      await apply.mutateAsync(code.trim());
+      toast.success('Промокод применён');
+      setCode('');
+    } catch (err) {
+      toast.error(
+        err instanceof ApiHttpError ? String(err.body.message) : 'Промокод недействителен',
+      );
+    }
+  }
+
+  async function onRemove() {
+    try {
+      await remove.mutateAsync();
+      toast.success('Промокод снят');
+    } catch {
+      toast.error('Не удалось снять промокод');
+    }
+  }
+
+  if (active) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-2">
+            <Tag className="h-4 w-4 text-primary" />
+            <div>
+              <div className="text-sm font-semibold">{active.code}</div>
+              <div className="text-xs text-muted-foreground">
+                Скидка −{formatPrice(active.discount)}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={remove.isPending}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+          >
+            <X className="h-4 w-4" /> Снять
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <form onSubmit={onApply} className="flex items-center gap-2">
+          <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="Промокод"
+            className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+          />
+          <Button type="submit" variant="outline" disabled={apply.isPending || !code.trim()}>
+            Применить
+          </Button>
+        </form>
+        {cart.promo && !cart.promo.valid && cart.promo.message ? (
+          <p className="mt-2 text-xs text-destructive">{cart.promo.message}</p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

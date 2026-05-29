@@ -41,8 +41,7 @@ export function useUpdateCartItem() {
 export function useRemoveCartItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<Cart>(`/cart/items/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiFetch<Cart>(`/cart/items/${id}`, { method: 'DELETE' }),
     onSuccess: (data) => qc.setQueryData(cartKey, data),
   });
 }
@@ -52,5 +51,21 @@ export function useClearCart() {
   return useMutation({
     mutationFn: () => apiFetch<Cart>('/cart', { method: 'DELETE' }),
     onSuccess: (data) => qc.setQueryData(cartKey, data),
+  });
+}
+
+export function useApplyPromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => apiFetch<Cart>('/cart/promo', { method: 'POST', body: { code } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: cartKey }),
+  });
+}
+
+export function useRemovePromo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<Cart>('/cart/promo', { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: cartKey }),
   });
 }

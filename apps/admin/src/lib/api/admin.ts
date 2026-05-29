@@ -17,6 +17,7 @@ export interface AdminMerchant {
   taxId: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  commissionRate: string | null;
   createdAt: string;
   user: {
     email: string | null;
