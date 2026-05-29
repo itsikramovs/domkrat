@@ -112,6 +112,65 @@ export class MerchantOrdersService {
     });
   }
 
+  /**
+   * FIFO-списание при отгрузке: уменьшает остаток по ячейкам, начиная с самой старой партии
+   * (oldestReceivedAt), пишет StockMovement(SHIPMENT) на каждую затронутую ячейку. Реализует
+   * ротацию «старое продаётся раньше». Если ячеечных остатков не хватает (дрейф данных или
+   * товар без размещения) — списывает что есть и логирует остаток отдельным движением.
+   */
+  private async deductFromCellsFifo(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    merchantId: string,
+    quantity: number,
+    ctx: { subOrderId: string; userId: string; reason: string },
+  ): Promise<void> {
+    let remaining = quantity;
+    const cells = await tx.inventoryBalance.findMany({
+      where: { productId, merchantId, cellId: { not: null }, quantityAvailable: { gt: 0 } },
+      orderBy: [{ oldestReceivedAt: 'asc' }, { lastReceivedAt: 'asc' }],
+    });
+
+    for (const c of cells) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, c.quantityAvailable);
+      await tx.inventoryBalance.update({
+        where: { id: c.id },
+        data: { quantityAvailable: { decrement: take } },
+      });
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          merchantId,
+          movementType: 'SHIPMENT',
+          quantity: -take,
+          fromCellId: c.cellId,
+          referenceType: 'sub_order',
+          referenceId: ctx.subOrderId,
+          performedById: ctx.userId,
+          notes: ctx.reason,
+        },
+      });
+      remaining -= take;
+    }
+
+    if (remaining > 0) {
+      // нет ячеечного остатка под весь объём — фиксируем остаток без привязки к ячейке
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          merchantId,
+          movementType: 'SHIPMENT',
+          quantity: -remaining,
+          referenceType: 'sub_order',
+          referenceId: ctx.subOrderId,
+          performedById: ctx.userId,
+          notes: `${ctx.reason} (без привязки к ячейке)`,
+        },
+      });
+    }
+  }
+
   // -------------------------------------------------------------------------
   private async transition(
     merchantId: string,
@@ -137,102 +196,107 @@ export class MerchantOrdersService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.orderSubOrder.update({
-        where: { id: subOrderId },
-        data: { status: cfg.to, [cfg.timestampField]: new Date() },
-      });
-
-      if (cfg.itemStatus) {
-        await tx.orderItem.updateMany({
-          where: { subOrderId },
-          data: { status: cfg.itemStatus, ...(cfg.itemStatus === OrderItemStatus.PICKED ? { pickedAt: new Date(), pickedById: userId } : {}) },
+    return this.prisma
+      .$transaction(async (tx) => {
+        const updated = await tx.orderSubOrder.update({
+          where: { id: subOrderId },
+          data: { status: cfg.to, [cfg.timestampField]: new Date() },
         });
-      }
 
-      // Если ASSEMBLED/SHIPPED — списать stock_reservation для shipping
-      if (cfg.to === OrderStatus.SHIPPED) {
-        const items = await tx.orderItem.findMany({
-          where: { subOrderId },
-          select: { productId: true, merchantId: true, quantity: true },
-        });
-        for (const it of items) {
-          await tx.inventoryBalance.updateMany({
-            where: { productId: it.productId, merchantId: it.merchantId, cellId: null },
-            data: { quantityReserved: { decrement: it.quantity } },
-          });
-          await tx.stockMovement.create({
+        if (cfg.itemStatus) {
+          await tx.orderItem.updateMany({
+            where: { subOrderId },
             data: {
-              productId: it.productId,
-              merchantId: it.merchantId,
-              movementType: 'SHIPMENT',
-              quantity: -it.quantity,
-              referenceType: 'sub_order',
-              referenceId: subOrderId,
-              performedById: userId,
-              notes: cfg.reason,
+              status: cfg.itemStatus,
+              ...(cfg.itemStatus === OrderItemStatus.PICKED
+                ? { pickedAt: new Date(), pickedById: userId }
+                : {}),
             },
           });
         }
-        await tx.stockReservation.updateMany({
-          where: { orderItem: { subOrderId }, releasedAt: null },
-          data: { releasedAt: new Date(), releasedReason: 'shipped' },
-        });
-      }
 
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId: sub.orderId,
-          subOrderId,
-          fromStatus: sub.status,
-          toStatus: cfg.to,
-          changedById: userId,
-          changedByRole: 'MERCHANT',
-          reason: cfg.reason,
-        },
-      });
+        // Если ASSEMBLED/SHIPPED — списать stock_reservation для shipping
+        if (cfg.to === OrderStatus.SHIPPED) {
+          const items = await tx.orderItem.findMany({
+            where: { subOrderId },
+            select: { productId: true, merchantId: true, quantity: true },
+          });
+          for (const it of items) {
+            // снимаем резерв с агрегата
+            await tx.inventoryBalance.updateMany({
+              where: { productId: it.productId, merchantId: it.merchantId, cellId: null },
+              data: { quantityReserved: { decrement: it.quantity } },
+            });
+            // FIFO: физически списываем из ячеек, начиная с самой старой партии (ротация)
+            await this.deductFromCellsFifo(tx, it.productId, it.merchantId, it.quantity, {
+              subOrderId,
+              userId,
+              reason: cfg.reason,
+            });
+          }
+          await tx.stockReservation.updateMany({
+            where: { orderItem: { subOrderId }, releasedAt: null },
+            data: { releasedAt: new Date(), releasedReason: 'shipped' },
+          });
+        }
 
-      // Обновляем общий order.status, если все sub_orders в одинаковом статусе
-      const allSubs = await tx.orderSubOrder.findMany({
-        where: { orderId: sub.orderId },
-        select: { status: true },
-      });
-      const allSame = allSubs.every((s) => s.status === cfg.to);
-      if (allSame) {
-        const orderTimestampField =
-          cfg.to === OrderStatus.PROCESSING ? 'confirmedAt' :
-          cfg.to === OrderStatus.SHIPPED ? 'shippedAt' : undefined;
-
-        await tx.order.update({
-          where: { id: sub.orderId },
-          data: {
-            status: cfg.to,
-            ...(orderTimestampField ? { [orderTimestampField]: new Date() } : {}),
-          },
-        });
         await tx.orderStatusHistory.create({
           data: {
             orderId: sub.orderId,
-            fromStatus: 'partial',
+            subOrderId,
+            fromStatus: sub.status,
             toStatus: cfg.to,
-            changedByRole: 'SYSTEM',
-            reason: `All sub-orders → ${cfg.to}`,
+            changedById: userId,
+            changedByRole: 'MERCHANT',
+            reason: cfg.reason,
           },
         });
-        this.logger.log(`Order ${sub.orderId} bumped to ${cfg.to} (all sub-orders aligned)`);
-      }
 
-      return updated;
-    }).then((result) => {
-      if (cfg.to === OrderStatus.SHIPPED) {
-        this.events.emit(SubOrderEvents.Shipped, {
-          subOrderId,
-          subOrderNumber: result.subOrderNumber,
-          orderId: result.orderId,
-          merchantId: result.merchantId,
-        } satisfies SubOrderEventPayload);
-      }
-      return result;
-    });
+        // Обновляем общий order.status, если все sub_orders в одинаковом статусе
+        const allSubs = await tx.orderSubOrder.findMany({
+          where: { orderId: sub.orderId },
+          select: { status: true },
+        });
+        const allSame = allSubs.every((s) => s.status === cfg.to);
+        if (allSame) {
+          const orderTimestampField =
+            cfg.to === OrderStatus.PROCESSING
+              ? 'confirmedAt'
+              : cfg.to === OrderStatus.SHIPPED
+                ? 'shippedAt'
+                : undefined;
+
+          await tx.order.update({
+            where: { id: sub.orderId },
+            data: {
+              status: cfg.to,
+              ...(orderTimestampField ? { [orderTimestampField]: new Date() } : {}),
+            },
+          });
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: sub.orderId,
+              fromStatus: 'partial',
+              toStatus: cfg.to,
+              changedByRole: 'SYSTEM',
+              reason: `All sub-orders → ${cfg.to}`,
+            },
+          });
+          this.logger.log(`Order ${sub.orderId} bumped to ${cfg.to} (all sub-orders aligned)`);
+        }
+
+        return updated;
+      })
+      .then((result) => {
+        if (cfg.to === OrderStatus.SHIPPED) {
+          this.events.emit(SubOrderEvents.Shipped, {
+            subOrderId,
+            subOrderNumber: result.subOrderNumber,
+            orderId: result.orderId,
+            merchantId: result.merchantId,
+          } satisfies SubOrderEventPayload);
+        }
+        return result;
+      });
   }
 }

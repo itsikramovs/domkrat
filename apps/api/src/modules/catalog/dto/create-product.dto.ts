@@ -170,6 +170,45 @@ export class ReceiveProductDto {
   unitCost?: number;
 }
 
+/** Одна строка многострочной приёмки. */
+export class ReceiveBatchItemDto {
+  @ApiProperty()
+  @IsUUID()
+  productId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  cellId!: string;
+
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+}
+
+/** Многострочная приёмка админом: один склад, мерчант, несколько товаров → размещение + активация. */
+export class ReceiveBatchDto {
+  @ApiProperty()
+  @IsUUID()
+  merchantId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  warehouseId!: string;
+
+  @ApiProperty({ type: [ReceiveBatchItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReceiveBatchItemDto)
+  items!: ReceiveBatchItemDto[];
+}
+
 export class UpdateProductStatusDto {
   @ApiProperty({ enum: ProductStatus })
   @IsEnum(ProductStatus)

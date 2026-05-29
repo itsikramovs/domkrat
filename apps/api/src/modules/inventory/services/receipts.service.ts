@@ -222,6 +222,109 @@ export class ReceiptsService {
     });
   }
 
+  /**
+   * Многострочный приход в один шаг (админ): одна завершённая приёмка на несколько товаров,
+   * каждый размещается на свою ячейку. Возвращает приёмку. Активацию товаров делает вызывающий.
+   */
+  async quickReceiveMany(params: {
+    merchantId: string;
+    warehouseId: string;
+    performedById: string;
+    items: Array<{
+      productId: string;
+      cellId: string;
+      quantity: number;
+      unitCost?: number | string | null;
+    }>;
+  }) {
+    if (params.items.length === 0) throw new BadRequestException('Добавьте хотя бы одну позицию');
+
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: params.warehouseId } });
+    if (!warehouse) throw new NotFoundException('Склад не найден');
+    if (warehouse.merchantId !== params.merchantId && warehouse.type !== WarehouseType.PLATFORM) {
+      throw new ForbiddenException('Нельзя принимать на этот склад');
+    }
+
+    const productIds = [...new Set(params.items.map((i) => i.productId))];
+    const owned = await this.prisma.product.count({
+      where: { id: { in: productIds }, merchantId: params.merchantId, deletedAt: null },
+    });
+    if (owned !== productIds.length) {
+      throw new BadRequestException('Все товары должны принадлежать мерчанту');
+    }
+
+    const cells = await this.prisma.warehouseCell.findMany({
+      where: { id: { in: [...new Set(params.items.map((i) => i.cellId))] } },
+      include: { shelf: { include: { rack: { include: { zone: true } } } } },
+    });
+    const cellMap = new Map(cells.map((c) => [c.id, c]));
+    for (const it of params.items) {
+      if (it.quantity <= 0) throw new BadRequestException('Количество должно быть больше 0');
+      const cell = cellMap.get(it.cellId);
+      if (!cell) throw new NotFoundException('Ячейка не найдена');
+      if (cell.shelf.rack.zone.warehouseId !== params.warehouseId)
+        throw new BadRequestException(`Ячейка ${cell.code} не из выбранного склада`);
+      if (cell.isBlocked || !cell.isActive)
+        throw new ConflictException(`Ячейка ${cell.code} недоступна`);
+      if (cell.merchantId && cell.merchantId !== params.merchantId)
+        throw new ForbiddenException(`Ячейка ${cell.code} арендована другим мерчантом`);
+    }
+
+    const cost = (v?: number | string | null) => (v != null && v !== '' ? new Decimal(v) : null);
+    const totalQty = params.items.reduce((s, i) => s + i.quantity, 0);
+    const totalValue = params.items.reduce(
+      (s, i) => s.plus(new Decimal(i.unitCost ?? 0).times(i.quantity)),
+      new Decimal(0),
+    );
+    const receiptNumber = await this.numbering.nextReceiptNumber();
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const receipt = await tx.stockReceipt.create({
+        data: {
+          receiptNumber,
+          merchantId: params.merchantId,
+          warehouseId: params.warehouseId,
+          status: ReceiptStatus.COMPLETED,
+          qualityCheckStatus: QualityCheckStatus.PASSED,
+          placementStatus: PlacementStatus.COMPLETED,
+          totalItems: params.items.length,
+          totalQuantity: totalQty,
+          totalValue: totalValue.toFixed(2),
+          receivedById: params.performedById,
+          receivedAt: now,
+          notes: 'Многострочный приход из админ-панели',
+          items: {
+            create: params.items.map((i) => ({
+              productId: i.productId,
+              expectedQuantity: i.quantity,
+              receivedQuantity: i.quantity,
+              acceptedQuantity: i.quantity,
+              rejectedQuantity: 0,
+              unitCost: cost(i.unitCost),
+              placedInCells: { [i.cellId]: i.quantity } as unknown as Prisma.InputJsonValue,
+            })),
+          },
+        },
+        include: { items: true },
+      });
+
+      for (const i of params.items) {
+        await this.addStock(tx, {
+          productId: i.productId,
+          merchantId: params.merchantId,
+          cellId: i.cellId,
+          warehouseId: params.warehouseId,
+          quantity: i.quantity,
+          unitCost: cost(i.unitCost),
+          performedById: params.performedById,
+          receiptId: receipt.id,
+        });
+      }
+      return receipt;
+    });
+  }
+
   /** Шаг 2: отправить в ожидание (DRAFT → EXPECTED). */
   async submit(id: string, merchantId: string) {
     const r = await this.requireStatus(id, merchantId, [ReceiptStatus.DRAFT]);

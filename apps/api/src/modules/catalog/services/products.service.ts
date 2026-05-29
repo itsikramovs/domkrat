@@ -457,6 +457,38 @@ export class ProductsService {
     return product;
   }
 
+  // ----- Admin images (no ownership check; merchantId derived from product) -----
+  private async merchantIdOf(productId: string): Promise<string> {
+    const p = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { merchantId: true },
+    });
+    if (!p) throw new NotFoundException('Product not found');
+    return p.merchantId;
+  }
+
+  async adminAddImage(
+    productId: string,
+    data: {
+      url: string;
+      thumbnailUrl?: string;
+      width?: number;
+      height?: number;
+      fileSize?: number;
+      isPrimary?: boolean;
+    },
+  ) {
+    return this.addImage(await this.merchantIdOf(productId), productId, data);
+  }
+
+  async adminRemoveImage(productId: string, imageId: string) {
+    return this.removeImage(await this.merchantIdOf(productId), productId, imageId);
+  }
+
+  async adminSetPrimaryImage(productId: string, imageId: string) {
+    return this.setPrimaryImage(await this.merchantIdOf(productId), productId, imageId);
+  }
+
   /** Активировать товар после прихода — делает его продаваемым. */
   async adminActivate(id: string) {
     const updated = await this.prisma.product.update({
