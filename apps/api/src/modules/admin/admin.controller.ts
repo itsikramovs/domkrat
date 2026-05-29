@@ -27,6 +27,7 @@ import { HoldReleaseService } from '../finance/hold-release.service';
 
 import { CreateMerchantDto } from './dto/create-merchant.dto';
 import { CreateStaffDto, SetStaffRolesDto } from './dto/create-staff.dto';
+import { AdminCustomersService } from './services/admin-customers.service';
 import { AdminFinanceService } from './services/admin-finance.service';
 import { AdminMerchantsService } from './services/admin-merchants.service';
 import { AdminOrdersService } from './services/admin-orders.service';
@@ -38,6 +39,7 @@ import { AdminUsersService } from './services/admin-users.service';
 export class AdminController {
   constructor(
     private readonly users: AdminUsersService,
+    private readonly customers: AdminCustomersService,
     private readonly merchants: AdminMerchantsService,
     private readonly orders: AdminOrdersService,
     private readonly finance: AdminFinanceService,
@@ -111,6 +113,29 @@ export class AdminController {
     @CurrentUser() admin: AuthenticatedUser,
   ) {
     return this.users.setStaffRoles(id, dto.roles, admin.id);
+  }
+
+  // ============================================================ Customers
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.SUPPORT_AGENT)
+  @Get('customers')
+  @ApiOperation({ summary: 'Клиенты (с агрегатами заказов)' })
+  listCustomers(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.customers.list({
+      search,
+      page: page ? Number(page) : 1,
+      perPage: perPage ? Number(perPage) : 30,
+    });
+  }
+
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.SUPPORT_AGENT)
+  @Get('customers/:id')
+  @ApiOperation({ summary: 'Карточка клиента' })
+  getCustomer(@Param('id', ParseUUIDPipe) id: string) {
+    return this.customers.get(id);
   }
 
   // ============================================================ Merchants

@@ -46,7 +46,68 @@ export function useSetUserStatus() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
+      qc.invalidateQueries({ queryKey: ['admin-customers'] });
+      qc.invalidateQueries({ queryKey: ['admin-customer'] });
     },
+  });
+}
+
+// ============================ Клиенты ============================
+export interface AdminCustomer {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  createdAt: string;
+  ordersCount: number;
+  totalSpent: string;
+}
+
+export interface CustomerAddress {
+  id: string;
+  region: string;
+  city: string;
+  addressLine: string;
+  isDefault: boolean;
+}
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalAmount: string;
+  placedAt: string;
+  _count?: { items: number };
+}
+
+export interface AdminCustomerDetail extends AdminCustomer {
+  preferredLanguage: string;
+  lastLoginAt: string | null;
+  addresses: CustomerAddress[];
+  recentOrders: CustomerOrder[];
+}
+
+export function useCustomers(search?: string) {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-customers', search, t],
+    queryFn: () =>
+      apiFetch<Paginated<AdminCustomer>>(
+        `/admin/customers?${new URLSearchParams(search ? { search } : {}).toString()}`,
+      ),
+    enabled: Boolean(t),
+  });
+}
+
+export function useCustomer(id: string | null) {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-customer', id, t],
+    queryFn: () => apiFetch<AdminCustomerDetail>(`/admin/customers/${id}`),
+    enabled: Boolean(t && id),
   });
 }
 

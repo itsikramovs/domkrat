@@ -3,6 +3,7 @@
 import {
   Award,
   Banknote,
+  Contact,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -54,6 +55,7 @@ const GROUPS: Group[] = [
     title: 'Партнёры',
     items: [
       { href: '/merchants', label: 'Мерчанты', icon: ShieldCheck },
+      { href: '/customers', label: 'Клиенты', icon: Contact },
       { href: '/users', label: 'Пользователи', icon: Users },
     ],
   },
