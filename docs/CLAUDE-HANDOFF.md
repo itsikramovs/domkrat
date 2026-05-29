@@ -16,7 +16,7 @@
 2. Закрыть `admin.domcrat.uz` через **Cloudflare Access** (email allowlist).
 3. Отозвать временный Cloudflare API-токен (лежит `~/.config/cloudflare-api.token`, своё дело сделал).
 
-**Незакоммиченные правки** (на момент написания в `git status`): code-fix `StorageService` (split internal/public MinIO), все `*.env.production.example`, systemd-юниты, cloudflared-конфиг, `.gitignore`, `docs/09`, новый `docs/11-LAUNCH-DOMCRAT.md`. Секретов в трекинге нет (`.env.production*` игнорятся). **Решить: закоммитить на `master`.**
+**Деплой-правки закоммичены** на `master` → `dc6b0ba` _chore(deploy): wire up domcrat.uz production deployment_ (code-fix `StorageService`, все `*.env.production.example`, systemd-юниты, cloudflared-конфиг, `.gitignore`, `docs/09`, новый `docs/11`). Секретов в трекинге нет. **Не запушено на remote** — `git push origin master` по готовности.
 
 Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`**.
 
@@ -53,7 +53,7 @@
 
 ### Метрики
 
-- **33 коммита** в master (главная ветка: `master`, не `main` — расхождение с git config!)
+- **34 коммита** в master (главная ветка: `master`, не `main` — расхождение с git config!)
 - **273 .ts/.tsx файлов**
 - **81 тест** (38 unit + 43 E2E) — все зелёные
 - **16 NestJS модулей**, **~30 страниц web**, **9 страниц merchant**, **20+ admin**
