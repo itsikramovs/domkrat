@@ -27,8 +27,10 @@ export function AdminHeader() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur">
       <div className="container flex h-16 items-center gap-6">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="rounded bg-destructive px-2 py-1 text-sm font-bold text-white">DK</span>
-          <span className="text-lg font-bold">Admin</span>
+          <span className="rounded-lg bg-brand-gradient px-2 py-1 text-sm font-bold text-white shadow-sm shadow-primary/25">
+            DK
+          </span>
+          <span className="text-lg font-bold tracking-tight">Admin</span>
         </Link>
 
         {mounted && user ? (
@@ -54,7 +56,15 @@ export function AdminHeader() {
               <span className="text-sm text-muted-foreground hidden sm:inline">
                 {user.firstName ?? user.email}
               </span>
-              <Button variant="ghost" size="icon" onClick={() => { clear(); router.push('/login'); }} title="Выйти">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  clear();
+                  router.push('/login');
+                }}
+                title="Выйти"
+              >
                 <LogOut className="h-4 w-4" />
               </Button>
             </>

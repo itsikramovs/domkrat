@@ -26,8 +26,10 @@ export function MerchantHeader() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="container flex h-16 items-center gap-6">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="rounded bg-primary px-2 py-1 text-sm font-bold text-primary-foreground">DK</span>
-          <span className="text-lg font-bold">Merchant</span>
+          <span className="rounded-lg bg-brand-gradient px-2 py-1 text-sm font-bold text-primary-foreground shadow-sm shadow-primary/25">
+            DK
+          </span>
+          <span className="text-lg font-bold tracking-tight">Merchant</span>
         </Link>
 
         {mounted && user ? (

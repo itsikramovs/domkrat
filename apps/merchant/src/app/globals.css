@@ -29,7 +29,7 @@
     --input: 214 32% 91%;
     --ring: 24 95% 53%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
   }
 
   html,
@@ -45,5 +45,24 @@
       'Segoe UI',
       Roboto,
       sans-serif;
+  }
+
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
