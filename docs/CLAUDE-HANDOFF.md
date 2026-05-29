@@ -14,13 +14,15 @@
 
 > ⚠️ 2026-05-29 сервер **ребутнулся** — это и уронило прежний `setsid`-запуск (docker-инфра вернулась сама, node+cloudflared нет). После перевода на user-systemd такой сбой больше не повторится.
 
-**Остались задачи, требующие дашборда Cloudflare (НЕ автоматизируются текущим API-токеном, у него только `Zone→DNS:Edit`):**
+✅ **Cloudflare (через API, 2026-05-29):** SSL/TLS mode = **Full**, **Always Use HTTPS** = On (http→https 301 работает). DNS — 6 проксируемых CNAME. Зона `domcrat.uz` id `57d795b4a4a7f86b7af698b8366ed3ef`, account `db799ee23a7f3f9d0afedf7a3a751132`. Zero Trust org уже есть: `ezozshox.cloudflareaccess.com`. Единственный участник аккаунта: `itsikramovs@yandex.ru`.
 
-1. Закрыть `admin.domcrat.uz` через **Cloudflare Access** (email allowlist) — только дашборд/токен с `Access:Edit`.
-2. Отозвать временный Cloudflare API-токен (`~/.config/cloudflare-api.token`) — он больше не нужен (DNS создан, туннель locally-managed). Делается в дашборде.
-3. (Опц.) `git push origin master` — коммиты пока локальные.
+**Остаётся ручное / по решению пользователя:**
 
-**Закоммичено** на `master`: `dc6b0ba` (deploy wiring) + `e7c0666` (handoff sync) + коммит этой сессии (user-systemd units + docs). Секретов в трекинге нет. **Не запушено на remote.**
+1. **Cloudflare Access на `admin.domcrat.uz`** — пользователь решил **пока пропустить** (админка открыта по HTTPS). Можно включить в любой момент: у меня есть токен с `Access:Edit` → создам Access-app + Allow-policy на нужный email по команде; либо вы сами в Zero Trust → Access → Applications.
+2. **Отозвать API-токены** (только дашборд — user-level token API недоступен): `dash.cloudflare.com → My Profile → API Tokens`. Старый DNS-only токен — отозвать (не нужен). Новый широкий токен (`~/.config/cloudflare-api.token`, права Access/Tunnel/DNS/Zone) — оставить, если планируете мои дальнейшие правки в CF (Access, DNS для `domkrat.uz`), иначе тоже отозвать.
+3. **Git remote отсутствует** (`git remote -v` пусто) — `push` невозможен, пока не создадите репозиторий на GitHub/др. и не добавите `origin`. Все коммиты пока только локальные.
+
+**Закоммичено** на `master`: `dc6b0ba` (deploy wiring) + `e7c0666` (handoff sync) + `7726e5e` (user-systemd units + docs). Секретов в трекинге нет.
 
 Подробный runbook именно этого сервера — **`docs/11-LAUNCH-DOMCRAT.md`** (§6a — user-systemd).
 
