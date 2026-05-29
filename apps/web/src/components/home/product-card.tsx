@@ -1,4 +1,4 @@
-import { Heart, Sparkles, Star, Zap } from 'lucide-react';
+import { Heart, Sparkles, Star, Wrench, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 import { AddToCartButton } from '@/components/add-to-cart-button';
@@ -21,7 +21,7 @@ export function ProductCard({ product, className = '' }: { product: Product; cla
 
   return (
     <article
-      className={`relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-shadow hover:shadow-md ${className}`}
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover ${className}`}
     >
       <Link href={`/p/${product.slug}`} className="relative block">
         {/* Бейджи */}
@@ -52,18 +52,18 @@ export function ProductCard({ product, className = '' }: { product: Product; cla
         </button>
 
         {/* Картинка / плейсхолдер */}
-        <div className="aspect-square w-full bg-secondary">
+        <div className="aspect-square w-full overflow-hidden bg-gradient-to-br from-secondary to-accent">
           {product.images?.[0]?.thumbnailUrl || product.images?.[0]?.url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={product.images[0]!.thumbnailUrl ?? product.images[0]!.url}
               alt={pickLocale(product.name)}
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-5xl text-muted-foreground/40">
-              🔧
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+              <Wrench className="h-12 w-12" strokeWidth={1.5} />
             </div>
           )}
         </div>
@@ -72,15 +72,15 @@ export function ProductCard({ product, className = '' }: { product: Product; cla
       <div className="flex flex-1 flex-col gap-2 p-3">
         <Link href={`/p/${product.slug}`} className="flex flex-col gap-1">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-bold tabular-nums md:text-base">{formatPrice(product.price)}</span>
+            <span className="text-sm font-bold tabular-nums md:text-base">
+              {formatPrice(product.price)}
+            </span>
             {product.compareAtPrice ? (
               <>
                 <span className="text-xs text-muted-foreground line-through tabular-nums">
                   {formatPrice(product.compareAtPrice)}
                 </span>
-                {pct ? (
-                  <span className="text-xs font-semibold text-sale">−{pct}%</span>
-                ) : null}
+                {pct ? <span className="text-xs font-semibold text-sale">−{pct}%</span> : null}
               </>
             ) : null}
           </div>

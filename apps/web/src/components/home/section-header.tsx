@@ -12,11 +12,14 @@ export function SectionHeader({
 }) {
   return (
     <div className="mb-3 flex items-end justify-between px-4 md:px-0">
-      <h2 className="text-lg font-bold md:text-xl">{title}</h2>
+      <h2 className="flex items-center gap-2 text-lg font-bold tracking-tight md:text-xl">
+        <span className="h-5 w-1 rounded-full bg-brand-gradient" aria-hidden />
+        {title}
+      </h2>
       {href ? (
         <Link
           href={href}
-          className="flex items-center gap-0.5 text-sm font-medium text-primary hover:underline"
+          className="flex items-center gap-0.5 text-sm font-medium text-primary transition-colors hover:text-primary/70"
         >
           {hrefLabel}
           <ChevronRight className="h-4 w-4" />

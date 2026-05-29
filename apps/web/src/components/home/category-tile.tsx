@@ -38,10 +38,13 @@ export function CategoryTile({ category }: { category: Category }) {
       className="group flex flex-col items-center gap-2 text-center"
       aria-label={pickLocale(category.name)}
     >
-      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl bg-secondary transition-transform group-active:scale-95">
-        <Icon className="h-8 w-8 text-primary" strokeWidth={1.75} />
+      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-accent to-secondary shadow-card transition-all duration-200 group-hover:-translate-y-0.5 group-hover:shadow-card-hover group-active:scale-95">
+        <Icon
+          className="h-8 w-8 text-primary transition-transform duration-200 group-hover:scale-110"
+          strokeWidth={1.75}
+        />
       </div>
-      <span className="line-clamp-2 text-xs font-medium leading-tight md:text-sm">
+      <span className="line-clamp-2 text-xs font-medium leading-tight text-foreground/90 md:text-sm">
         {pickLocale(category.name)}
       </span>
     </Link>

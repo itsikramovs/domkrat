@@ -70,4 +70,27 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
+  /* Убираем серую вспышку при тапе на мобильном (modern feel) */
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Выделение текста в фирменном цвете */
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+
+  /* Доступность: уважаем prefers-reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

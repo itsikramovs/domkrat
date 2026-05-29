@@ -64,6 +64,24 @@ const config: Config = {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      boxShadow: {
+        // Мягкая многослойная тень для карточек (modern e-commerce depth)
+        card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 2px 6px -1px rgb(15 23 42 / 0.06)',
+        'card-hover': '0 10px 28px -8px rgb(15 23 42 / 0.16), 0 4px 10px -4px rgb(15 23 42 / 0.10)',
+        elevated: '0 16px 40px -12px rgb(15 23 42 / 0.22)',
+      },
+      backgroundImage: {
+        'brand-gradient': 'linear-gradient(135deg, hsl(218 91% 56%), hsl(224 80% 45%))',
+      },
+      keyframes: {
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-up': 'fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
+      },
     },
   },
   plugins: [animate],

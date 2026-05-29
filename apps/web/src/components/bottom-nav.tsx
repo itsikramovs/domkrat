@@ -54,7 +54,14 @@ export function BottomNav() {
                   active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+                <span
+                  className={cn(
+                    'flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-200',
+                    active ? 'bg-accent' : 'bg-transparent',
+                  )}
+                >
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+                </span>
                 <span>{t(labelKey)}</span>
                 {badge && mounted && count > 0 ? (
                   <span

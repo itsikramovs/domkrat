@@ -6,7 +6,7 @@ import { pickLocale } from '@/lib/utils';
 
 export function HeroBanner({ banner }: { banner: Banner }) {
   const inner = (
-    <div className="relative overflow-hidden rounded-3xl bg-hero text-hero-foreground">
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[hsl(220_60%_12%)] to-[hsl(224_74%_26%)] text-hero-foreground shadow-elevated">
       {/* Стилизованный фон автомобиля (CSS shapes — без реального изображения) */}
       <div className="absolute inset-0 opacity-60">
         <div className="absolute -right-12 top-1/2 h-44 w-72 -translate-y-1/2 rounded-full bg-primary/30 blur-2xl" />
