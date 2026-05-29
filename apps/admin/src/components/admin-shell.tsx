@@ -106,6 +106,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   // Страница логина — без админского хрома
   if (pathname === '/login') return <>{children}</>;
 
+  const logout = () => {
+    clear();
+    router.push('/login');
+  };
+
   const nav = (
     <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
       {GROUPS.map((g) => (
@@ -137,6 +142,19 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       ))}
+
+      <div className="border-t border-slate-800 pt-3">
+        <button
+          onClick={() => {
+            setOpen(false);
+            logout();
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-red-500/10 hover:text-red-400"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          Выйти из админки
+        </button>
+      </div>
     </nav>
   );
 
@@ -197,10 +215,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 clear();
                 router.push('/login');
               }}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               title="Выйти"
             >
               <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Выйти</span>
             </button>
           </div>
         </header>

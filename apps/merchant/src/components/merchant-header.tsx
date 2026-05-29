@@ -59,8 +59,9 @@ export function MerchantHeader() {
                 {user.firstName ?? user.email}
               </span>
               <Button
-                variant="ghost"
-                size="icon"
+                variant="outline"
+                size="sm"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 onClick={() => {
                   clear();
                   router.push('/login');
@@ -68,6 +69,7 @@ export function MerchantHeader() {
                 title="Выйти"
               >
                 <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Выйти</span>
               </Button>
             </>
           ) : null}

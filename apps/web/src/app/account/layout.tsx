@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Car, MapPin, Package, RotateCcw, User } from 'lucide-react';
+import { Bell, Car, Heart, LogOut, MapPin, Package, RotateCcw, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
@@ -26,13 +26,21 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
 }
 
 function AccountShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+  const router = useRouter();
+  const clear = useAuthStore((s) => s.clear);
   const unread = useUnreadCount();
   const unreadCount = unread.data?.count ?? 0;
 
+  function logout() {
+    clear();
+    router.push('/');
+  }
+
   const links = [
     { href: '/account', label: 'Профиль', icon: User, exact: true },
-    { href: '/account/notifications', label: 'Уведомления', icon: Bell, badge: unreadCount },
     { href: '/account/orders', label: 'Заказы', icon: Package },
+    { href: '/account/notifications', label: 'Уведомления', icon: Bell, badge: unreadCount },
+    { href: '/account/favorites', label: 'Избранное', icon: Heart },
     { href: '/account/returns', label: 'Возвраты', icon: RotateCcw },
     { href: '/account/addresses', label: 'Адреса', icon: MapPin },
     { href: '/account/garage', label: 'Гараж', icon: Car },
@@ -72,6 +80,16 @@ function AccountShell({ pathname, children }: { pathname: string; children: Reac
             </Link>
           );
         })}
+
+        {/* Выход — отдельная кнопка, видимая и на мобильном (горизонтальный скролл), и на десктопе */}
+        <button
+          type="button"
+          onClick={logout}
+          className="flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10 md:mt-2 md:rounded-md md:border-t md:border-transparent"
+        >
+          <LogOut className="h-4 w-4" />
+          <span className="whitespace-nowrap">Выйти</span>
+        </button>
       </aside>
       <main>{children}</main>
     </div>
