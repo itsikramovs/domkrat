@@ -173,9 +173,14 @@ export interface AdminCategory {
   id: string;
   name: ML;
   slug: string;
+  description?: ML | null;
   parentId: string | null;
   position: number;
-  _count?: { products: number };
+  level: number;
+  iconUrl: string | null;
+  imageUrl: string | null;
+  isActive: boolean;
+  _count?: { products: number; children: number };
 }
 
 export function useAdminCategories() {

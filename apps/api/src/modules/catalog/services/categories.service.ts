@@ -38,6 +38,7 @@ export class CategoriesService {
   listAll() {
     return this.prisma.category.findMany({
       orderBy: [{ level: 'asc' }, { position: 'asc' }],
+      include: { _count: { select: { products: true, children: true } } },
     });
   }
 
