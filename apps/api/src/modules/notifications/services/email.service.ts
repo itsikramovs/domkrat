@@ -40,11 +40,14 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
         ignoreTLS: true,
       });
     } else {
-      // Production SMTP
+      // Production SMTP. secure=true → implicit TLS (порт 465, как у mail.ru/yandex);
+      // secure=false → STARTTLS (587). По умолчанию выводим из порта, можно переопределить SMTP_SECURE.
+      const port = Number(this.config.get<string>('SMTP_PORT') ?? 587);
+      const secure = (this.config.get<string>('SMTP_SECURE') ?? String(port === 465)) === 'true';
       this.transporter = nodemailer.createTransport({
         host: this.config.get<string>('SMTP_HOST'),
-        port: Number(this.config.get<string>('SMTP_PORT') ?? 587),
-        secure: false,
+        port,
+        secure,
         auth: {
           user: this.config.get<string>('SMTP_USER'),
           pass: this.config.get<string>('SMTP_PASSWORD'),
@@ -86,7 +89,9 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
           metadata: { messageId: info.messageId, accepted: info.accepted, rejected: info.rejected },
         },
       });
-      this.logger.log(`Email sent to=${params.to} subject="${params.subject}" id=${info.messageId}`);
+      this.logger.log(
+        `Email sent to=${params.to} subject="${params.subject}" id=${info.messageId}`,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.prisma.notification.update({
