@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { CarsModule } from '../cars/cars.module';
+import { InventoryModule } from '../inventory/inventory.module';
 import { AdminAttributesController } from './controllers/admin-attributes.controller';
 import { AdminCatalogController } from './controllers/admin-catalog.controller';
 import { AdminProductsController } from './controllers/admin-products.controller';
@@ -15,7 +16,7 @@ import { CategoriesService } from './services/categories.service';
 import { ProductsService } from './services/products.service';
 
 @Module({
-  imports: [CarsModule],
+  imports: [CarsModule, InventoryModule],
   controllers: [
     CategoriesController,
     BrandsController,

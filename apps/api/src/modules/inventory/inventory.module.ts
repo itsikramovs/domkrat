@@ -18,6 +18,6 @@ import { WarehousesService } from './services/warehouses.service';
     AlertsService,
     ReceiptNumberingService,
   ],
-  exports: [InventoryService, WarehousesService, AlertsService],
+  exports: [InventoryService, WarehousesService, AlertsService, ReceiptsService],
 })
 export class InventoryModule {}

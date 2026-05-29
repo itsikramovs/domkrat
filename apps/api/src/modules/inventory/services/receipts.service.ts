@@ -126,6 +126,102 @@ export class ReceiptsService {
     });
   }
 
+  /**
+   * Быстрый приход в один шаг (для админ-панели): создаёт завершённую приёмку на один товар
+   * и сразу размещает его на ячейку. Возвращает приёмку. Делает товар физически на складе и
+   * продаваемым (агрегатный InventoryBalance). НЕ меняет статус товара — это делает вызывающий.
+   */
+  async quickReceiveAndPlace(params: {
+    merchantId: string;
+    productId: string;
+    warehouseId: string;
+    cellId: string;
+    quantity: number;
+    unitCost?: number | string | null;
+    performedById: string;
+  }) {
+    if (params.quantity <= 0) throw new BadRequestException('Количество должно быть больше 0');
+
+    const product = await this.prisma.product.findFirst({
+      where: { id: params.productId, merchantId: params.merchantId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!product) throw new NotFoundException('Товар не найден у этого мерчанта');
+
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: params.warehouseId } });
+    if (!warehouse) throw new NotFoundException('Склад не найден');
+    if (warehouse.merchantId !== params.merchantId && warehouse.type !== WarehouseType.PLATFORM) {
+      throw new ForbiddenException('Нельзя принимать на этот склад');
+    }
+
+    const cell = await this.prisma.warehouseCell.findUnique({
+      where: { id: params.cellId },
+      include: { shelf: { include: { rack: { include: { zone: true } } } } },
+    });
+    if (!cell) throw new NotFoundException('Ячейка не найдена');
+    if (cell.shelf.rack.zone.warehouseId !== params.warehouseId) {
+      throw new BadRequestException('Ячейка не из выбранного склада');
+    }
+    if (cell.isBlocked || !cell.isActive)
+      throw new ConflictException(`Ячейка ${cell.code} недоступна`);
+    if (cell.merchantId && cell.merchantId !== params.merchantId) {
+      throw new ForbiddenException(`Ячейка ${cell.code} арендована другим мерчантом`);
+    }
+
+    const unitCost =
+      params.unitCost != null && params.unitCost !== '' ? new Decimal(params.unitCost) : null;
+    const receiptNumber = await this.numbering.nextReceiptNumber();
+    const now = new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      const receipt = await tx.stockReceipt.create({
+        data: {
+          receiptNumber,
+          merchantId: params.merchantId,
+          warehouseId: params.warehouseId,
+          status: ReceiptStatus.COMPLETED,
+          qualityCheckStatus: QualityCheckStatus.PASSED,
+          placementStatus: PlacementStatus.COMPLETED,
+          totalItems: 1,
+          totalQuantity: params.quantity,
+          totalValue: unitCost ? unitCost.times(params.quantity).toFixed(2) : '0',
+          receivedById: params.performedById,
+          receivedAt: now,
+          notes: 'Быстрый приход из админ-панели',
+          items: {
+            create: [
+              {
+                productId: params.productId,
+                expectedQuantity: params.quantity,
+                receivedQuantity: params.quantity,
+                acceptedQuantity: params.quantity,
+                rejectedQuantity: 0,
+                unitCost,
+                placedInCells: {
+                  [params.cellId]: params.quantity,
+                } as unknown as Prisma.InputJsonValue,
+              },
+            ],
+          },
+        },
+        include: { items: true },
+      });
+
+      await this.addStock(tx, {
+        productId: params.productId,
+        merchantId: params.merchantId,
+        cellId: params.cellId,
+        warehouseId: params.warehouseId,
+        quantity: params.quantity,
+        unitCost,
+        performedById: params.performedById,
+        receiptId: receipt.id,
+      });
+
+      return receipt;
+    });
+  }
+
   /** Шаг 2: отправить в ожидание (DRAFT → EXPECTED). */
   async submit(id: string, merchantId: string) {
     const r = await this.requireStatus(id, merchantId, [ReceiptStatus.DRAFT]);

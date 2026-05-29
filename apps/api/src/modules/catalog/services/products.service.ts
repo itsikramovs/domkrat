@@ -10,6 +10,7 @@ import { Prisma, ProductStatus } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import type { CreateCompatibilityDto } from '../dto/compatibility.dto';
 import type {
+  AdminCreateProductDto,
   CreateProductDto,
   ModerateProductDto,
   ProductAttributeValueDto,
@@ -259,6 +260,20 @@ export class ProductsService {
 
   async update(merchantId: string, id: string, dto: UpdateProductDto) {
     await this.ensureOwnership(merchantId, id);
+    return this.applyUpdate(id, dto);
+  }
+
+  /** Обновление товара админом (за любого мерчанта, без проверки владельца). */
+  async adminUpdate(id: string, dto: UpdateProductDto) {
+    const existing = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Product not found');
+    return this.applyUpdate(id, dto);
+  }
+
+  private async applyUpdate(id: string, dto: UpdateProductDto) {
     const data: Prisma.ProductUpdateInput = {};
     if (dto.sku !== undefined) data.sku = dto.sku;
     if (dto.slug !== undefined) data.slug = dto.slug;
@@ -413,6 +428,44 @@ export class ProductsService {
 
   listAll(query: ListProductsDto) {
     return this.listPublic({ ...query }, { adminMode: true });
+  }
+
+  /** Админ создаёт товар за мерчанта. Всегда DRAFT — продаётся только после прихода (размещения). */
+  async adminCreate(dto: AdminCreateProductDto) {
+    const merchant = await this.prisma.merchant.findUnique({
+      where: { id: dto.merchantId },
+      select: { id: true },
+    });
+    if (!merchant) throw new BadRequestException('Мерчант не найден');
+    return this.create(dto.merchantId, { ...dto, status: ProductStatus.DRAFT });
+  }
+
+  /** Детальная карточка для админки: атрибуты, изображения, продаваемый остаток. */
+  async adminGet(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        ...PRODUCT_INCLUDE,
+        attributes: { include: { attribute: true } },
+        inventoryBalances: {
+          where: { cellId: null },
+          select: { quantityAvailable: true },
+        },
+      },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
+  /** Активировать товар после прихода — делает его продаваемым. */
+  async adminActivate(id: string) {
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: { status: ProductStatus.ACTIVE, publishedAt: new Date() },
+      include: PRODUCT_INCLUDE,
+    });
+    this.emitIndexed(id);
+    return updated;
   }
 
   async moderate(id: string, dto: ModerateProductDto) {

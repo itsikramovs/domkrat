@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -139,6 +140,35 @@ export class CreateProductDto {
 }
 
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
+
+/** Создание товара админом за конкретного мерчанта. Товар создаётся как DRAFT (не продаётся до прихода). */
+export class AdminCreateProductDto extends CreateProductDto {
+  @ApiProperty({ description: 'Мерчант-владелец товара' })
+  @IsUUID()
+  merchantId!: string;
+}
+
+/** Быстрый приход (оприходование) товара админом: приёмка → размещение на ячейку → товар становится продаваемым. */
+export class ReceiveProductDto {
+  @ApiProperty()
+  @IsUUID()
+  warehouseId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  cellId!: string;
+
+  @ApiProperty({ example: 10 })
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @ApiPropertyOptional({ description: 'Себестоимость единицы (для учёта)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+}
 
 export class UpdateProductStatusDto {
   @ApiProperty({ enum: ProductStatus })
