@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, LogOut, Package, Store } from 'lucide-react';
+import { Boxes, Layers, LogOut, Package, PackagePlus, Store, Warehouse } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -20,6 +20,9 @@ export function MerchantHeader() {
     { href: '/dashboard', label: 'Дашборд', icon: Store },
     { href: '/products', label: 'Товары', icon: Boxes },
     { href: '/orders', label: 'Заказы', icon: Package },
+    { href: '/warehouses', label: 'Склады', icon: Warehouse },
+    { href: '/receipts', label: 'Приёмки', icon: PackagePlus },
+    { href: '/inventory', label: 'Остатки', icon: Layers },
   ];
 
   return (

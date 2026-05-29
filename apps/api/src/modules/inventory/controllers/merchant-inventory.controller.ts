@@ -27,6 +27,7 @@ import {
   CreateShelfDto,
   CreateWarehouseDto,
   CreateZoneDto,
+  QuickCellDto,
   UpdateWarehouseDto,
 } from '../dto/warehouse.dto';
 import { InventoryService } from '../services/inventory.service';
@@ -112,6 +113,16 @@ export class MerchantInventoryController {
     @Body() dto: CreateCellDto,
   ) {
     return this.warehouses.addCell(id, dto, this.mid(u));
+  }
+
+  @Post('warehouses/:id/quick-cell')
+  @ApiOperation({ summary: 'Быстро добавить ячейку (авто зона/стеллаж/полка)' })
+  quickCell(
+    @CurrentUser() u: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: QuickCellDto,
+  ) {
+    return this.warehouses.quickAddCell(id, dto, this.mid(u));
   }
 
   // ---------------- Приёмки (приходование) ----------------

@@ -9,6 +9,7 @@ import {
   CreateShelfDto,
   CreateWarehouseDto,
   CreateZoneDto,
+  QuickCellDto,
   UpdateWarehouseDto,
 } from '../dto/warehouse.dto';
 import { WarehousesService } from '../services/warehouses.service';
@@ -67,5 +68,11 @@ export class AdminInventoryController {
   @Post('shelves/:id/cells')
   addCell(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateCellDto) {
     return this.warehouses.addCell(id, dto);
+  }
+
+  @Post(':id/quick-cell')
+  @ApiOperation({ summary: 'Быстро добавить ячейку (авто зона/стеллаж/полка)' })
+  quickCell(@Param('id', ParseUUIDPipe) id: string, @Body() dto: QuickCellDto) {
+    return this.warehouses.quickAddCell(id, dto);
   }
 }

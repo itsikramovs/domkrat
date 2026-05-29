@@ -156,6 +156,19 @@ export class CreateShelfDto {
   maxWeightKg?: number;
 }
 
+/** Быстрое создание ячейки: авто-создаёт зону A / стеллаж R1 / полку S1 при отсутствии. */
+export class QuickCellDto {
+  @ApiProperty({ example: 'A-01', description: 'Код ячейки (уникальный)' })
+  @IsString()
+  @Length(1, 60)
+  code!: string;
+
+  @ApiPropertyOptional({ enum: CellType, example: CellType.STANDARD })
+  @IsOptional()
+  @IsEnum(CellType)
+  cellType?: CellType;
+}
+
 export class CreateCellDto {
   @ApiProperty({ example: 'A-R1-S1-01', description: 'Глобально уникальный код ячейки' })
   @IsString()

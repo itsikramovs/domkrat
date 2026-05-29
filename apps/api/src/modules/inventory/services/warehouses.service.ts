@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, WarehouseType } from '@prisma/client';
+import { CellType, Prisma, WarehouseType } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import type {
@@ -160,6 +160,43 @@ export class WarehousesService {
         merchantId: dto.merchantId ?? null,
         maxWeightKg: dto.maxWeightKg?.toString(),
         qrCode: dto.qrCode ?? dto.code,
+      },
+    });
+  }
+
+  /**
+   * Быстрое создание ячейки: авто-создаёт дефолтную зону A → стеллаж R1 → полку S1,
+   * если их нет, и кладёт ячейку туда. Упрощает UI (без ручной иерархии).
+   */
+  async quickAddCell(
+    warehouseId: string,
+    dto: { code: string; cellType?: CellType },
+    merchantId?: string,
+  ) {
+    const wh = await this.prisma.warehouse.findUnique({ where: { id: warehouseId } });
+    if (!wh) throw new NotFoundException('Warehouse not found');
+    this.assertOwner(wh.merchantId, merchantId);
+
+    let zone = await this.prisma.warehouseZone.findFirst({ where: { warehouseId, code: 'A' } });
+    zone ??= await this.prisma.warehouseZone.create({
+      data: { warehouseId, code: 'A', name: { ru: 'Зона A', uz: 'A zona' } },
+    });
+    let rack = await this.prisma.warehouseRack.findFirst({
+      where: { zoneId: zone.id, code: 'R1' },
+    });
+    rack ??= await this.prisma.warehouseRack.create({ data: { zoneId: zone.id, code: 'R1' } });
+    let shelf = await this.prisma.warehouseShelf.findFirst({
+      where: { rackId: rack.id, code: 'S1' },
+    });
+    shelf ??= await this.prisma.warehouseShelf.create({
+      data: { rackId: rack.id, code: 'S1', level: 1 },
+    });
+    return this.prisma.warehouseCell.create({
+      data: {
+        shelfId: shelf.id,
+        code: dto.code,
+        cellType: dto.cellType ?? 'STANDARD',
+        qrCode: dto.code,
       },
     });
   }
