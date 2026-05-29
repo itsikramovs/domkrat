@@ -122,6 +122,100 @@ export function useDeleteBrand() {
   });
 }
 
+// ============================ Характеристики ============================
+export type AttributeDataType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'ENUM' | 'MULTI_ENUM';
+
+export interface AttributeEnumValue {
+  value: string;
+  label: ML;
+}
+
+export interface AdminAttributeGroup {
+  id: string;
+  name: ML;
+  slug: string;
+  position: number;
+  _count?: { attributes: number };
+}
+
+export interface AdminAttribute {
+  id: string;
+  name: ML;
+  slug: string;
+  code: string | null;
+  dataType: AttributeDataType;
+  unit: string | null;
+  isFilterable: boolean;
+  isSearchable: boolean;
+  isRequired: boolean;
+  position: number;
+  attributeGroupId: string | null;
+  categoryIds: string[];
+  enumValues: AttributeEnumValue[] | null;
+  group?: { id: string; name: ML; slug: string } | null;
+  _count?: { productAttributes: number };
+}
+
+export function useAttributeGroups() {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-attr-groups', t],
+    queryFn: () => apiFetch<AdminAttributeGroup[]>('/admin/attribute-groups'),
+    enabled: Boolean(t),
+  });
+}
+
+export function useSaveAttributeGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: Record<string, unknown> }) =>
+      id
+        ? apiFetch(`/admin/attribute-groups/${id}`, { method: 'PATCH', body })
+        : apiFetch('/admin/attribute-groups', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-attr-groups'] }),
+  });
+}
+
+export function useDeleteAttributeGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/attribute-groups/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-attr-groups'] });
+      qc.invalidateQueries({ queryKey: ['admin-attributes'] });
+    },
+  });
+}
+
+export function useAttributes(groupId?: string) {
+  const t = useTok();
+  return useQuery({
+    queryKey: ['admin-attributes', groupId, t],
+    queryFn: () =>
+      apiFetch<AdminAttribute[]>(`/admin/attributes${groupId ? `?groupId=${groupId}` : ''}`),
+    enabled: Boolean(t),
+  });
+}
+
+export function useSaveAttribute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id?: string; body: Record<string, unknown> }) =>
+      id
+        ? apiFetch(`/admin/attributes/${id}`, { method: 'PATCH', body })
+        : apiFetch('/admin/attributes', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-attributes'] }),
+  });
+}
+
+export function useDeleteAttribute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiFetch(`/admin/attributes/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-attributes'] }),
+  });
+}
+
 // ============================ Модерация товаров ============================
 export interface AdminProduct {
   id: string;

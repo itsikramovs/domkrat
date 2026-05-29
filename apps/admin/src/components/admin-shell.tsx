@@ -4,6 +4,7 @@ import {
   Award,
   Banknote,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
   PackageSearch,
@@ -37,6 +38,7 @@ const GROUPS: Group[] = [
       { href: '/catalog/products', label: 'Модерация товаров', icon: PackageSearch },
       { href: '/catalog/categories', label: 'Категории', icon: Tags },
       { href: '/catalog/brands', label: 'Бренды', icon: Award },
+      { href: '/attributes', label: 'Характеристики', icon: ListChecks },
     ],
   },
   {
