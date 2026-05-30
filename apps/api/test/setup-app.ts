@@ -40,5 +40,6 @@ export async function loginAs(
 export const SEED_USERS = {
   customer: { email: 'customer1@example.com', password: 'Test1234!' },
   merchant: { email: 'merchant1@example.com', password: 'Test1234!' },
+  merchant2: { email: 'merchant2@example.com', password: 'Test1234!' },
   admin: { email: 'super@domkrat.uz', password: 'Test1234!' },
 } as const;

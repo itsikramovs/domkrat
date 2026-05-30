@@ -12,6 +12,7 @@ describe('Merchant flow (e2e)', () => {
   let app: INestApplication;
   let http: ReturnType<INestApplication['getHttpServer']>;
   let merchantToken: string;
+  let merchant2Token: string;
   let customerToken: string;
 
   beforeAll(async () => {
@@ -19,6 +20,8 @@ describe('Merchant flow (e2e)', () => {
     http = app.getHttpServer();
     const m = await loginAs(app, SEED_USERS.merchant.email, SEED_USERS.merchant.password);
     merchantToken = m.accessToken;
+    const m2 = await loginAs(app, SEED_USERS.merchant2.email, SEED_USERS.merchant2.password);
+    merchant2Token = m2.accessToken;
     const c = await loginAs(app, SEED_USERS.customer.email, SEED_USERS.customer.password);
     customerToken = c.accessToken;
   });
@@ -85,41 +88,75 @@ describe('Merchant flow (e2e)', () => {
     expect(res.body.rangeDays).toBe(365);
   });
 
-  it('merchant создаёт продукт через merchant API и видит его в списке', async () => {
-    const sku = `E2E-${Date.now()}`;
-    const category = await request(http).get('/api/v1/categories?level=0&perPage=1');
-    const cats = Array.isArray(category.body) ? category.body : category.body.data;
-    const categoryId = cats[0]?.id;
-    expect(categoryId).toBeDefined();
+  // --- Маркетплейс-модель: мерчант управляет СВОИМИ предложениями (offer),
+  //     товары/контент не создаёт (ведёт админ). ---
 
-    const create = await request(http)
-      .post('/api/v1/merchant/products')
+  it('merchant видит /merchant/offers — список своих предложений с ценой/статусом/остатком', async () => {
+    const res = await request(http)
+      .get('/api/v1/merchant/offers')
+      .set('Authorization', `Bearer ${merchantToken}`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    const offer = res.body[0];
+    expect(offer).toHaveProperty('id');
+    expect(offer).toHaveProperty('price');
+    expect(offer).toHaveProperty('status');
+    expect(offer).toHaveProperty('stock');
+    expect(offer.product).toHaveProperty('name');
+    expect(offer.product.name).toEqual(expect.objectContaining({ ru: expect.any(String) }));
+  });
+
+  it('customer не имеет доступа к /merchant/offers (403)', async () => {
+    const res = await request(http)
+      .get('/api/v1/merchant/offers')
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('неавторизованный → 401 на /merchant/offers', async () => {
+    await request(http).get('/api/v1/merchant/offers').expect(401);
+  });
+
+  it('merchant правит цену своего предложения и видит изменение в списке', async () => {
+    const before = await request(http)
+      .get('/api/v1/merchant/offers')
+      .set('Authorization', `Bearer ${merchantToken}`);
+    expect(before.status).toBe(200);
+    const offer = before.body[0] as { id: string; price: string };
+    const original = Number(offer.price);
+    const newPrice = original + 1;
+
+    const patch = await request(http)
+      .patch(`/api/v1/merchant/offers/${offer.id}`)
       .set('Authorization', `Bearer ${merchantToken}`)
-      .send({
-        categoryId,
-        sku,
-        name: { ru: 'E2E тест-продукт', uz: 'E2E test mahsulot' },
-        price: '100000',
-        status: 'ACTIVE',
-      });
-    if (create.status !== 201) {
-      // некоторые валидации (slug, brand) могут потребовать ещё полей — пропускаем мягко
-      console.warn('  create product skipped:', create.status, create.body);
-      return;
-    }
-    const productId = create.body.id;
-    expect(productId).toBeDefined();
+      .send({ price: newPrice });
+    expect(patch.status).toBe(200);
+    expect(Number(patch.body.price)).toBe(newPrice);
 
-    const list = await request(http)
-      .get('/api/v1/merchant/products?perPage=50')
-      .set('Authorization', `Bearer ${merchantToken}`);
-    expect(list.status).toBe(200);
-    const ids = list.body.data.map((p: { id: string }) => p.id);
-    expect(ids).toContain(productId);
+    // восстанавливаем исходную цену за собой
+    const restore = await request(http)
+      .patch(`/api/v1/merchant/offers/${offer.id}`)
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .send({ price: original });
+    expect(restore.status).toBe(200);
+    expect(Number(restore.body.price)).toBe(original);
+  });
 
-    // cleanup — удаляем за собой
-    await request(http)
-      .delete(`/api/v1/merchant/products/${productId}`)
-      .set('Authorization', `Bearer ${merchantToken}`);
+  it('merchant НЕ может править чужое предложение (403, multi-tenancy)', async () => {
+    // берём предложение второго мерчанта…
+    const other = await request(http)
+      .get('/api/v1/merchant/offers')
+      .set('Authorization', `Bearer ${merchant2Token}`);
+    expect(other.status).toBe(200);
+    expect(other.body.length).toBeGreaterThan(0);
+    const foreignOfferId = (other.body[0] as { id: string }).id;
+
+    // …и пытаемся изменить его токеном первого мерчанта
+    const res = await request(http)
+      .patch(`/api/v1/merchant/offers/${foreignOfferId}`)
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .send({ price: 999999 });
+    expect(res.status).toBe(403);
   });
 });
