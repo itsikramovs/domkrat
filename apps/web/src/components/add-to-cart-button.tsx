@@ -12,11 +12,14 @@ import { useAuthStore } from '@/lib/auth-store';
 
 interface Props {
   productId: string;
+  /** Предложение продавца (маркетплейс). Если задано — добавляем по offerId. */
+  offerId?: string;
   /** Компактный режим — только синяя кнопка "+ В корзину" без счётчика (для каталога/каруселей). */
   compact?: boolean;
+  disabled?: boolean;
 }
 
-export function AddToCartButton({ productId, compact = false }: Props) {
+export function AddToCartButton({ productId, offerId, compact = false, disabled = false }: Props) {
   const router = useRouter();
   const accessToken = useAuthStore((s) => s.accessToken);
   const addToCart = useAddToCart();
@@ -29,7 +32,8 @@ export function AddToCartButton({ productId, compact = false }: Props) {
       return;
     }
     try {
-      await addToCart.mutateAsync({ productId, quantity: compact ? 1 : qty });
+      const target = offerId ? { offerId } : { productId };
+      await addToCart.mutateAsync({ ...target, quantity: compact ? 1 : qty });
       toast.success('Добавлено в корзину');
     } catch (error) {
       const msg = error instanceof ApiHttpError ? error.body.message : 'Не удалось добавить';
@@ -42,7 +46,7 @@ export function AddToCartButton({ productId, compact = false }: Props) {
       <button
         type="button"
         onClick={handle}
-        disabled={addToCart.isPending}
+        disabled={addToCart.isPending || disabled}
         className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98] disabled:opacity-60"
       >
         <Plus className="h-4 w-4" />
@@ -54,7 +58,12 @@ export function AddToCartButton({ productId, compact = false }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex items-center rounded-md border">
-        <Button type="button" variant="ghost" size="icon" onClick={() => setQty(Math.max(1, qty - 1))}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setQty(Math.max(1, qty - 1))}
+        >
           <Minus className="h-4 w-4" />
         </Button>
         <span className="w-10 text-center text-sm">{qty}</span>
@@ -62,7 +71,7 @@ export function AddToCartButton({ productId, compact = false }: Props) {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
-      <Button size="lg" onClick={handle} disabled={addToCart.isPending}>
+      <Button size="lg" onClick={handle} disabled={addToCart.isPending || disabled}>
         <ShoppingCart className="mr-2 h-5 w-5" />
         {addToCart.isPending ? 'Добавляем…' : 'В корзину'}
       </Button>

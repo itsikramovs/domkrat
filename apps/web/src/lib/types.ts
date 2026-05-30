@@ -61,6 +61,31 @@ export interface Product {
   brand: Brand | null;
   category: Pick<Category, 'id' | 'name' | 'slug'>;
   merchant: MerchantSummary;
+  offersCount?: number;
+  sellerCount?: number;
+}
+
+/** Вариант товара (простой список ярлыков). */
+export interface ProductVariant {
+  id: string;
+  name: MultiLangText | null;
+  isDefault: boolean;
+  position: number;
+}
+
+/** Предложение продавца на конкретный вариант (мультипродавец, buy-box). */
+export interface ProductOffer {
+  id: string;
+  variantId: string;
+  merchantId: string;
+  sku: string;
+  price: string;
+  compareAtPrice: string | null;
+  vatRate: string;
+  status: string;
+  stock: number;
+  merchant: { id: string; brandName: string; slug: string };
+  variant: { id: string; name: MultiLangText | null; isDefault: boolean };
 }
 
 export interface Banner {

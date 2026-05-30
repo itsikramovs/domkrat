@@ -165,7 +165,12 @@ export class ProductsService {
       where: { id: product.id },
       data: { viewCount: { increment: 1 } },
     });
-    return this.project(product);
+    const projected = this.project(product);
+    // Для витрины (buy-box) отдаём активные предложения с остатком/продавцом/вариантом.
+    const offers = (await this.offers.listForProduct(product.id)).filter(
+      (o) => o.status === ProductOfferStatus.ACTIVE,
+    );
+    return { ...projected, offers };
   }
 
   async searchByOem(oem: string) {

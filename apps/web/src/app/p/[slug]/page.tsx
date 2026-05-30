@@ -2,14 +2,14 @@ import { ChevronRight, ShieldCheck, Star, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { AddToCartButton } from '@/components/add-to-cart-button';
+import { ProductPurchase } from '@/components/product-purchase';
 import { ReviewsSection } from '@/components/reviews-section';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { fetchProductReviews } from '@/lib/api/reviews-server';
 import { serverApi } from '@/lib/api-client';
-import type { Product } from '@/lib/types';
-import { formatPrice, pickLocale } from '@/lib/utils';
+import type { Product, ProductOffer, ProductVariant } from '@/lib/types';
+import { pickLocale } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +75,8 @@ export default async function ProductPage({ params }: PageProps) {
   const [product, reviews] = await Promise.all([
     serverApi()<
       Product & {
+        variants?: ProductVariant[];
+        offers?: ProductOffer[];
         attributes?: ProductAttr[];
         oemCodes?: Array<{ oemNumber: string; manufacturer: string | null; isPrimary: boolean }>;
         compatibilities?: Array<{
@@ -141,7 +143,6 @@ export default async function ProductPage({ params }: PageProps) {
           <div className="space-y-2">
             <div className="flex flex-wrap gap-1.5 text-xs">
               {product.brand ? <Badge variant="outline">{product.brand.name}</Badge> : null}
-              <Badge variant="secondary">{product.merchant.brandName}</Badge>
               {product.oemNumber ? (
                 <Badge variant="outline" className="font-mono">
                   OEM: {product.oemNumber}
@@ -163,16 +164,14 @@ export default async function ProductPage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="flex items-baseline gap-3">
-            <div className="text-3xl font-bold text-foreground tabular-nums md:text-4xl">
-              {formatPrice(product.price)}
-            </div>
-            {product.compareAtPrice ? (
-              <div className="text-base text-muted-foreground line-through tabular-nums">
-                {formatPrice(product.compareAtPrice)}
-              </div>
-            ) : null}
-          </div>
+          {/* Покупка: вариант + цена + продавцы (buy-box) + в корзину */}
+          <ProductPurchase
+            productId={product.id}
+            fallbackPrice={product.price}
+            fallbackCompareAt={product.compareAtPrice}
+            variants={product.variants ?? []}
+            offers={product.offers ?? []}
+          />
 
           {/* Доверие */}
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -184,11 +183,6 @@ export default async function ProductPage({ params }: PageProps) {
               <ShieldCheck className="h-4 w-4 text-primary" />
               <span>Гарантия качества</span>
             </div>
-          </div>
-
-          {/* На десктопе кнопка прямо здесь; на мобильном — sticky bar внизу */}
-          <div className="hidden md:block">
-            <AddToCartButton productId={product.id} />
           </div>
 
           {product.description ? (
@@ -279,20 +273,6 @@ export default async function ProductPage({ params }: PageProps) {
           reviewsCount={product.reviewsCount}
           initialReviews={reviews}
         />
-      </div>
-
-      {/* Sticky bottom bar для мобильного: цена + кнопка */}
-      <div
-        className="fixed inset-x-0 bottom-16 z-40 flex items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur md:hidden"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
-      >
-        <div className="flex flex-col">
-          <span className="text-xs text-muted-foreground">К оплате</span>
-          <span className="text-lg font-bold tabular-nums">{formatPrice(product.price)}</span>
-        </div>
-        <div className="flex-1">
-          <AddToCartButton productId={product.id} compact />
-        </div>
       </div>
     </div>
   );

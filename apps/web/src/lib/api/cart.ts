@@ -20,7 +20,7 @@ export function useCart() {
 export function useAddToCart() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { productId: string; quantity: number }) =>
+    mutationFn: (input: { productId?: string; offerId?: string; quantity: number }) =>
       apiFetch<Cart>('/cart/items', { method: 'POST', body: input }),
     onSuccess: (data) => qc.setQueryData(cartKey, data),
   });
