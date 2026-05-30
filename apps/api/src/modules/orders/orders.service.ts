@@ -52,8 +52,22 @@ export class OrdersService {
       include: {
         items: {
           include: {
-            product: {
-              include: { merchant: { select: { merchantType: true, commissionRate: true } } },
+            offer: {
+              include: {
+                merchant: { select: { merchantType: true, commissionRate: true } },
+                variant: { select: { id: true, name: true } },
+                product: {
+                  select: {
+                    id: true,
+                    categoryId: true,
+                    slug: true,
+                    name: true,
+                    oemNumber: true,
+                    status: true,
+                    deletedAt: true,
+                  },
+                },
+              },
             },
           },
         },
@@ -61,6 +75,14 @@ export class OrdersService {
     });
     if (!cart || cart.items.length === 0) {
       throw new BadRequestException('Cart is empty');
+    }
+    // Каждая позиция корзины должна иметь актуальное предложение продавца.
+    type LiveItem = (typeof cart.items)[number] & {
+      offer: NonNullable<(typeof cart.items)[number]['offer']>;
+    };
+    const liveItems = cart.items.filter((i): i is LiveItem => i.offer !== null);
+    if (liveItems.length !== cart.items.length) {
+      throw new ConflictException('Some items are no longer available');
     }
 
     // Проверка адреса доставки
@@ -74,10 +96,15 @@ export class OrdersService {
       if (!addr) throw new ForbiddenException('Address is not yours or does not exist');
     }
 
-    // Проверка товаров: все ACTIVE
-    for (const item of cart.items) {
-      if (item.product.deletedAt || item.product.status !== ProductStatus.ACTIVE) {
-        throw new ConflictException(`Product ${item.product.sku} is no longer available`);
+    // Проверка предложений: карточка ACTIVE и предложение ACTIVE
+    for (const item of liveItems) {
+      if (
+        item.offer.deletedAt ||
+        item.offer.status !== 'ACTIVE' ||
+        item.offer.product.deletedAt ||
+        item.offer.product.status !== ProductStatus.ACTIVE
+      ) {
+        throw new ConflictException(`Offer ${item.offer.sku} is no longer available`);
       }
     }
 
@@ -95,10 +122,10 @@ export class OrdersService {
       promoEvaluation = await this.promoCodes.evaluate(
         promoCodeRaw,
         userId,
-        cart.items.map((i) => ({
-          categoryId: i.product.categoryId,
-          merchantId: i.product.merchantId,
-          lineSubtotal: new Decimal(i.product.price.toString()).times(i.quantity),
+        liveItems.map((i) => ({
+          categoryId: i.offer.product.categoryId,
+          merchantId: i.offer.merchantId,
+          lineSubtotal: new Decimal(i.offer.price.toString()).times(i.quantity),
         })),
       );
       if (!promoEvaluation.valid) {
@@ -111,10 +138,10 @@ export class OrdersService {
       dto.deliveryMethod === DeliveryMethodType.SELF_PICKUP ? new Decimal(0) : new Decimal(25000);
 
     const breakdown = this.pricing.calculate(
-      cart.items.map((i) => ({
-        unitPrice: i.product.price,
+      liveItems.map((i) => ({
+        unitPrice: i.offer.price,
         quantity: i.quantity,
-        vatRate: i.product.vatRate,
+        vatRate: i.offer.vatRate,
       })),
       { deliveryCost, discount: promoEvaluation?.discount },
     );
@@ -124,12 +151,12 @@ export class OrdersService {
       ? await this.prisma.userAddress.findUnique({ where: { id: dto.deliveryAddressId } })
       : null;
 
-    // Группировка позиций по merchant_id для sub_orders
-    const itemsByMerchant = new Map<string, typeof cart.items>();
-    for (const item of cart.items) {
-      const arr = itemsByMerchant.get(item.product.merchantId) ?? [];
+    // Группировка позиций по merchant_id предложения для sub_orders
+    const itemsByMerchant = new Map<string, typeof liveItems>();
+    for (const item of liveItems) {
+      const arr = itemsByMerchant.get(item.offer.merchantId) ?? [];
       arr.push(item);
-      itemsByMerchant.set(item.product.merchantId, arr);
+      itemsByMerchant.set(item.offer.merchantId, arr);
     }
 
     const expiresAt = new Date(Date.now() + RESERVATION_TTL_MINUTES * 60_000);
@@ -169,16 +196,16 @@ export class OrdersService {
         merchantIndex++;
 
         const subSubtotal = items.reduce(
-          (acc, i) => acc.plus(new Decimal(i.product.price.toString()).times(i.quantity)),
+          (acc, i) => acc.plus(new Decimal(i.offer.price.toString()).times(i.quantity)),
           new Decimal(0),
         );
         const commissionRate = new Decimal(
-          items[0]!.product.merchant.commissionRate?.toString() ?? '10',
+          items[0]!.offer.merchant.commissionRate?.toString() ?? '10',
         );
         const commissionAmount = subSubtotal.times(commissionRate).dividedBy(100);
         const merchantPayout = subSubtotal.minus(commissionAmount);
         const fulfillmentType =
-          items[0]!.product.merchant.merchantType === MerchantType.TYPE_1
+          items[0]!.offer.merchant.merchantType === MerchantType.TYPE_1
             ? FulfillmentType.FBO
             : FulfillmentType.FBS;
 
@@ -195,11 +222,12 @@ export class OrdersService {
           },
         });
 
-        // OrderItems с snapshot product
+        // OrderItems со snapshot предложения/карточки
         for (const item of items) {
-          const unit = new Decimal(item.product.price.toString());
+          const offer = item.offer;
+          const unit = new Decimal(offer.price.toString());
           const itemSubtotal = unit.times(item.quantity);
-          const vatRate = new Decimal(item.product.vatRate.toString());
+          const vatRate = new Decimal(offer.vatRate.toString());
           const vatAmount = itemSubtotal.times(vatRate).dividedBy(100);
           const itemCommission = itemSubtotal.times(commissionRate).dividedBy(100);
 
@@ -207,14 +235,18 @@ export class OrdersService {
             data: {
               orderId: orderRow.id,
               subOrderId: sub.id,
-              productId: item.product.id,
+              productId: offer.productId,
+              offerId: offer.id,
+              variantId: offer.variantId,
               merchantId,
               productSnapshot: {
-                sku: item.product.sku,
-                name: item.product.name,
-                slug: item.product.slug,
-                price: item.product.price.toString(),
-                oemNumber: item.product.oemNumber,
+                sku: offer.sku,
+                name: offer.product.name,
+                slug: offer.product.slug,
+                price: offer.price.toString(),
+                oemNumber: offer.product.oemNumber,
+                variantLabel: offer.variant?.name ?? null,
+                offerId: offer.id,
               } as Prisma.InputJsonValue,
               quantity: item.quantity,
               unitPrice: unit.toString(),
@@ -227,12 +259,11 @@ export class OrdersService {
             },
           });
 
-          // Atomic decrement остатков: UPDATE ... WHERE quantity_available >= qty.
+          // Atomic decrement остатка предложения (агрегат cellId=null).
           // Если другая транзакция уже забрала — updated.count = 0 → throw → rollback.
           const updated = await tx.inventoryBalance.updateMany({
             where: {
-              productId: item.product.id,
-              merchantId,
+              offerId: offer.id,
               cellId: null,
               quantityAvailable: { gte: item.quantity },
             },
@@ -243,14 +274,16 @@ export class OrdersService {
           });
           if (updated.count === 0) {
             throw new ConflictException(
-              `Insufficient stock for ${item.product.sku} (requested ${item.quantity})`,
+              `Insufficient stock for ${offer.sku} (requested ${item.quantity})`,
             );
           }
 
           await tx.stockReservation.create({
             data: {
               orderItemId: orderItem.id,
-              productId: item.product.id,
+              productId: offer.productId,
+              offerId: offer.id,
+              variantId: offer.variantId,
               merchantId,
               quantity: item.quantity,
               expiresAt,
@@ -260,7 +293,9 @@ export class OrdersService {
           // Append-only audit запись о движении
           await tx.stockMovement.create({
             data: {
-              productId: item.product.id,
+              productId: offer.productId,
+              offerId: offer.id,
+              variantId: offer.variantId,
               merchantId,
               movementType: 'RESERVE',
               quantity: -item.quantity,
@@ -392,11 +427,21 @@ export class OrdersService {
       // Восстанавливаем остатки: для каждого item инвертируем decrement
       const items = await tx.orderItem.findMany({
         where: { orderId },
-        select: { id: true, productId: true, merchantId: true, quantity: true },
+        select: {
+          id: true,
+          productId: true,
+          offerId: true,
+          variantId: true,
+          merchantId: true,
+          quantity: true,
+        },
       });
       for (const it of items) {
+        // Возврат остатка по предложению (агрегат cellId=null).
         await tx.inventoryBalance.updateMany({
-          where: { productId: it.productId, merchantId: it.merchantId, cellId: null },
+          where: it.offerId
+            ? { offerId: it.offerId, cellId: null }
+            : { productId: it.productId, merchantId: it.merchantId, cellId: null },
           data: {
             quantityAvailable: { increment: it.quantity },
             quantityReserved: { decrement: it.quantity },
@@ -405,6 +450,8 @@ export class OrdersService {
         await tx.stockMovement.create({
           data: {
             productId: it.productId,
+            offerId: it.offerId,
+            variantId: it.variantId,
             merchantId: it.merchantId,
             movementType: 'UNRESERVE',
             quantity: it.quantity,

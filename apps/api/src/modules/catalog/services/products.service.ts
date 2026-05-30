@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, ProductStatus } from '@prisma/client';
+import { Prisma, ProductOfferStatus, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import type { CreateCompatibilityDto } from '../dto/compatibility.dto';
@@ -18,12 +18,15 @@ import type {
   UpdateProductStatusDto,
 } from '../dto/create-product.dto';
 import { ListProductsDto, ProductSort } from '../dto/list-products.dto';
+import { ProductOffersService, PUBLIC_OFFERS_INCLUDE } from './product-offers.service';
+import { ProductVariantsService } from './product-variants.service';
 
 const PRODUCT_INCLUDE = {
   images: { orderBy: { position: 'asc' } },
   brand: { select: { id: true, name: true, slug: true, logoUrl: true } },
   category: { select: { id: true, name: true, slug: true } },
-  merchant: { select: { id: true, brandName: true, slug: true } },
+  offers: PUBLIC_OFFERS_INCLUDE,
+  variants: { where: { isDefault: true } },
 } satisfies Prisma.ProductInclude;
 
 @Injectable()
@@ -31,6 +34,8 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    private readonly offers: ProductOffersService,
+    private readonly variants: ProductVariantsService,
   ) {}
 
   /** Уведомить поисковый индекс об изменении товара */
@@ -40,6 +45,13 @@ export class ProductsService {
 
   private emitRemoved(productId: string): void {
     this.events.emit('product.removed', productId);
+  }
+
+  /** Проецирует «основное предложение» на legacy-поля карточки (price/merchant/sku). */
+  private project<
+    T extends { offers?: Parameters<ProductOffersService['projectPrimaryOffer']>[0]['offers'] },
+  >(p: T) {
+    return this.offers.projectPrimaryOffer(p);
   }
 
   // -------------------------------------------------------------------------
@@ -61,7 +73,8 @@ export class ProductsService {
     if (query.categorySlug) where.category = { slug: query.categorySlug };
     if (query.brandId) where.brandId = query.brandId;
     if (query.brandSlug) where.brand = { slug: query.brandSlug };
-    if (query.merchantId) where.merchantId = query.merchantId;
+    if (query.merchantId)
+      where.offers = { some: { merchantId: query.merchantId, deletedAt: null } };
     if (query.featured) where.isFeatured = true;
     if (query.onSale) where.isOnSale = true;
     if (query.isNew) where.isNew = true;
@@ -70,22 +83,22 @@ export class ProductsService {
     // ProductCompatibility ссылается на эту модификацию, ИЛИ на её модель, ИЛИ на марку.
     const compat = await this.buildCompatibilityFilter(query);
     if (compat) where.compatibilities = { some: compat };
+    // Цена живёт на предложениях; фильтруем по денормализованному minPrice карточки.
     if (query.priceMin !== undefined || query.priceMax !== undefined) {
-      where.price = {};
-      if (query.priceMin !== undefined) where.price.gte = new Prisma.Decimal(query.priceMin);
-      if (query.priceMax !== undefined) where.price.lte = new Prisma.Decimal(query.priceMax);
+      where.minPrice = {};
+      if (query.priceMin !== undefined) where.minPrice.gte = new Prisma.Decimal(query.priceMin);
+      if (query.priceMax !== undefined) where.minPrice.lte = new Prisma.Decimal(query.priceMax);
     }
     if (query.search) {
-      // Простой ILIKE поиск по sku/oem; FTS на name JSONB — Phase 2.
+      // Простой ILIKE поиск по oem/sku предложений; FTS на name JSONB — Phase 2.
       where.OR = [
-        { sku: { contains: query.search, mode: 'insensitive' } },
         { oemNumber: { contains: query.search, mode: 'insensitive' } },
         { manufacturerPartNumber: { contains: query.search, mode: 'insensitive' } },
+        { offers: { some: { sku: { contains: query.search, mode: 'insensitive' } } } },
       ];
     }
 
     // Фильтр по характеристикам: "slug:val1,val2;slug2:val3"
-    // Внутри атрибута значения — OR, между атрибутами — AND (товар должен иметь все выбранные группы).
     const attrConditions = this.parseAttrFilter(query.attrs);
     if (attrConditions.length > 0) {
       where.AND = attrConditions;
@@ -96,9 +109,9 @@ export class ProductsService {
         case ProductSort.NEW:
           return [{ publishedAt: 'desc' }];
         case ProductSort.PRICE_ASC:
-          return [{ price: 'asc' }];
+          return [{ minPrice: 'asc' }];
         case ProductSort.PRICE_DESC:
-          return [{ price: 'desc' }];
+          return [{ minPrice: 'desc' }];
         case ProductSort.RATING:
           return [{ rating: 'desc' }, { reviewsCount: 'desc' }];
         case ProductSort.POPULAR:
@@ -119,7 +132,7 @@ export class ProductsService {
     ]);
 
     return {
-      data: items,
+      data: items.map((p) => this.project(p)),
       meta: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
     };
   }
@@ -129,6 +142,7 @@ export class ProductsService {
       where: { slug, deletedAt: null, status: ProductStatus.ACTIVE },
       include: {
         ...PRODUCT_INCLUDE,
+        variants: { orderBy: [{ isDefault: 'desc' }, { position: 'asc' }] },
         attributes: { include: { attribute: true } },
         oemCodes: true,
         compatibilities: {
@@ -148,15 +162,14 @@ export class ProductsService {
       where: { id: product.id },
       data: { viewCount: { increment: 1 } },
     });
-    return product;
+    return this.project(product);
   }
 
-  searchByOem(oem: string) {
+  async searchByOem(oem: string) {
     if (!oem || oem.length < 3) {
       throw new BadRequestException('OEM query is too short');
     }
-    // Простой ILIKE; pg_trgm для нечёткого — Phase 2 через raw SQL.
-    return this.prisma.product.findMany({
+    const items = await this.prisma.product.findMany({
       where: {
         status: ProductStatus.ACTIVE,
         deletedAt: null,
@@ -169,6 +182,7 @@ export class ProductsService {
       include: PRODUCT_INCLUDE,
       take: 50,
     });
+    return items.map((p) => this.project(p));
   }
 
   // -------------------------------------------------------------------------
@@ -178,12 +192,19 @@ export class ProductsService {
   async listForMerchant(merchantId: string, query: ListProductsDto) {
     const page = query.page ?? 1;
     const perPage = query.perPage ?? 20;
-    const where: Prisma.ProductWhereInput = { merchantId, deletedAt: null };
+    const where: Prisma.ProductWhereInput = {
+      deletedAt: null,
+      OR: [{ createdByMerchantId: merchantId }, { offers: { some: { merchantId } } }],
+    };
     if (query.categoryId) where.categoryId = query.categoryId;
     if (query.search) {
-      where.OR = [
-        { sku: { contains: query.search, mode: 'insensitive' } },
-        { oemNumber: { contains: query.search, mode: 'insensitive' } },
+      where.AND = [
+        {
+          OR: [
+            { oemNumber: { contains: query.search, mode: 'insensitive' } },
+            { offers: { some: { sku: { contains: query.search, mode: 'insensitive' } } } },
+          ],
+        },
       ];
     }
 
@@ -199,36 +220,40 @@ export class ProductsService {
     ]);
 
     return {
-      data: items,
+      data: items.map((p) => this.project(p)),
       meta: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
     };
   }
 
   async getForMerchant(merchantId: string, id: string) {
     const product = await this.prisma.product.findFirst({
-      where: { id, merchantId, deletedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        OR: [{ createdByMerchantId: merchantId }, { offers: { some: { merchantId } } }],
+      },
       include: {
         ...PRODUCT_INCLUDE,
+        variants: { orderBy: [{ isDefault: 'desc' }, { position: 'asc' }] },
         attributes: { include: { attribute: true } },
         oemCodes: true,
         compatibilities: true,
       },
     });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    return this.project(product);
   }
 
   async create(merchantId: string, dto: CreateProductDto) {
     const slug = dto.slug ?? this.toSlug(dto.name.ru) + '-' + dto.sku.toLowerCase().slice(0, 8);
 
     try {
-      const created = await this.prisma.$transaction(async (tx) => {
+      const productId = await this.prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
           data: {
-            merchantId,
+            createdByMerchantId: merchantId,
             categoryId: dto.categoryId,
             brandId: dto.brandId,
-            sku: dto.sku,
             slug,
             name: dto.name as unknown as Prisma.InputJsonValue,
             description: dto.description as unknown as Prisma.InputJsonValue,
@@ -237,22 +262,34 @@ export class ProductsService {
             barcode: dto.barcode,
             manufacturerPartNumber: dto.manufacturerPartNumber,
             weight: dto.weight !== undefined ? new Prisma.Decimal(dto.weight) : undefined,
-            price: new Prisma.Decimal(dto.price),
-            compareAtPrice:
-              dto.compareAtPrice !== undefined ? new Prisma.Decimal(dto.compareAtPrice) : undefined,
-            vatRate:
-              dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
+            minPrice: new Prisma.Decimal(dto.price),
             status: dto.status ?? ProductStatus.PENDING_REVIEW,
           },
-          include: PRODUCT_INCLUDE,
+        });
+        const variant = await tx.productVariant.create({
+          data: { productId: product.id, name: Prisma.JsonNull, position: 0, isDefault: true },
+        });
+        await tx.productOffer.create({
+          data: {
+            productId: product.id,
+            variantId: variant.id,
+            merchantId,
+            sku: dto.sku,
+            price: new Prisma.Decimal(dto.price),
+            compareAtPrice:
+              dto.compareAtPrice !== undefined ? new Prisma.Decimal(dto.compareAtPrice) : null,
+            vatRate:
+              dto.vatRate !== undefined ? new Prisma.Decimal(dto.vatRate) : new Prisma.Decimal(12),
+            status: ProductOfferStatus.ACTIVE,
+          },
         });
         if (dto.attributes !== undefined) {
           await this.syncAttributes(tx, product.id, dto.attributes);
         }
-        return product;
+        return product.id;
       });
-      this.emitIndexed(created.id);
-      return created;
+      this.emitIndexed(productId);
+      return this.findProjected(productId);
     } catch (error) {
       this.handleUniqueErr(error);
     }
@@ -260,7 +297,7 @@ export class ProductsService {
 
   async update(merchantId: string, id: string, dto: UpdateProductDto) {
     await this.ensureOwnership(merchantId, id);
-    return this.applyUpdate(id, dto);
+    return this.applyUpdate(id, dto, { merchantId });
   }
 
   /** Обновление товара админом (за любого мерчанта, без проверки владельца). */
@@ -273,9 +310,9 @@ export class ProductsService {
     return this.applyUpdate(id, dto);
   }
 
-  private async applyUpdate(id: string, dto: UpdateProductDto) {
+  private async applyUpdate(id: string, dto: UpdateProductDto, ctx?: { merchantId?: string }) {
+    // Контентные поля → карточка (Product)
     const data: Prisma.ProductUpdateInput = {};
-    if (dto.sku !== undefined) data.sku = dto.sku;
     if (dto.slug !== undefined) data.slug = dto.slug;
     if (dto.name !== undefined) data.name = dto.name as unknown as Prisma.InputJsonValue;
     if (dto.description !== undefined)
@@ -287,32 +324,61 @@ export class ProductsService {
     if (dto.manufacturerPartNumber !== undefined)
       data.manufacturerPartNumber = dto.manufacturerPartNumber;
     if (dto.weight !== undefined) data.weight = new Prisma.Decimal(dto.weight);
-    if (dto.price !== undefined) data.price = new Prisma.Decimal(dto.price);
-    if (dto.compareAtPrice !== undefined)
-      data.compareAtPrice = new Prisma.Decimal(dto.compareAtPrice);
-    if (dto.vatRate !== undefined) data.vatRate = new Prisma.Decimal(dto.vatRate);
     if (dto.status !== undefined) data.status = dto.status;
     if (dto.categoryId !== undefined) data.category = { connect: { id: dto.categoryId } };
     if (dto.brandId !== undefined)
       data.brand = dto.brandId ? { connect: { id: dto.brandId } } : { disconnect: true };
 
+    // Продающие поля (price/sku/...) → предложение продавца, а не карточка
+    const offerData: Prisma.ProductOfferUpdateInput = {};
+    if (dto.sku !== undefined) offerData.sku = dto.sku;
+    if (dto.price !== undefined) offerData.price = new Prisma.Decimal(dto.price);
+    if (dto.compareAtPrice !== undefined)
+      offerData.compareAtPrice =
+        dto.compareAtPrice !== null ? new Prisma.Decimal(dto.compareAtPrice) : null;
+    if (dto.vatRate !== undefined) offerData.vatRate = new Prisma.Decimal(dto.vatRate);
+    const hasOfferChanges = Object.keys(offerData).length > 0;
+
     try {
-      const updated = await this.prisma.$transaction(async (tx) => {
-        const product = await tx.product.update({
-          where: { id },
-          data,
-          include: PRODUCT_INCLUDE,
-        });
+      await this.prisma.$transaction(async (tx) => {
+        await tx.product.update({ where: { id }, data });
         if (dto.attributes !== undefined) {
-          await this.syncAttributes(tx, product.id, dto.attributes);
+          await this.syncAttributes(tx, id, dto.attributes);
         }
-        return product;
+        if (hasOfferChanges) {
+          const target = await this.resolveEditableOffer(tx, id, ctx?.merchantId);
+          if (target) {
+            await tx.productOffer.update({ where: { id: target }, data: offerData });
+            await this.offers.recomputeMinPrice(id, tx);
+          }
+        }
       });
-      this.emitIndexed(updated.id);
-      return updated;
+      this.emitIndexed(id);
+      return this.findProjected(id);
     } catch (error) {
       this.handleUniqueErr(error);
     }
+  }
+
+  /** Какое предложение редактируется при правке через legacy-форму: мерчанта, либо единственное. */
+  private async resolveEditableOffer(
+    tx: Prisma.TransactionClient,
+    productId: string,
+    merchantId?: string,
+  ): Promise<string | null> {
+    if (merchantId) {
+      const own = await tx.productOffer.findFirst({
+        where: { productId, merchantId, deletedAt: null },
+        select: { id: true },
+      });
+      return own?.id ?? null;
+    }
+    const all = await tx.productOffer.findMany({
+      where: { productId, deletedAt: null },
+      select: { id: true },
+      take: 2,
+    });
+    return all.length === 1 ? all[0].id : null;
   }
 
   /**
@@ -430,7 +496,7 @@ export class ProductsService {
     return this.listPublic({ ...query }, { adminMode: true });
   }
 
-  /** Админ создаёт товар за мерчанта. Всегда DRAFT — продаётся только после прихода (размещения). */
+  /** Админ создаёт карточку за мерчанта (контент + дефолтный вариант + первое предложение). Всегда DRAFT. */
   async adminCreate(dto: AdminCreateProductDto) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: dto.merchantId },
@@ -440,31 +506,45 @@ export class ProductsService {
     return this.create(dto.merchantId, { ...dto, status: ProductStatus.DRAFT });
   }
 
-  /** Детальная карточка для админки: атрибуты, изображения, продаваемый остаток. */
+  /** Детальная карточка для админки: атрибуты, изображения, варианты, предложения + остаток. */
   async adminGet(id: string) {
     const product = await this.prisma.product.findFirst({
       where: { id, deletedAt: null },
       include: {
         ...PRODUCT_INCLUDE,
+        variants: { orderBy: [{ isDefault: 'desc' }, { position: 'asc' }] },
         attributes: { include: { attribute: true } },
-        inventoryBalances: {
-          where: { cellId: null },
-          select: { quantityAvailable: true },
-        },
       },
     });
     if (!product) throw new NotFoundException('Product not found');
-    return product;
+    const offers = await this.offers.listForProduct(id);
+    return { ...this.project(product), offers };
+  }
+
+  /** Загружает карточку по id и проецирует (для возврата из create/update). */
+  private async findProjected(id: string) {
+    const product = await this.prisma.product.findFirst({
+      where: { id },
+      include: {
+        ...PRODUCT_INCLUDE,
+        variants: { orderBy: [{ isDefault: 'desc' }, { position: 'asc' }] },
+        attributes: { include: { attribute: true } },
+      },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return this.project(product);
   }
 
   // ----- Admin images (no ownership check; merchantId derived from product) -----
   private async merchantIdOf(productId: string): Promise<string> {
     const p = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { merchantId: true },
+      select: { createdByMerchantId: true, offers: { take: 1, select: { merchantId: true } } },
     });
     if (!p) throw new NotFoundException('Product not found');
-    return p.merchantId;
+    const merchantId = p.createdByMerchantId ?? p.offers[0]?.merchantId;
+    if (!merchantId) throw new NotFoundException('Product has no merchant');
+    return merchantId;
   }
 
   async adminAddImage(
@@ -489,12 +569,11 @@ export class ProductsService {
     return this.setPrimaryImage(await this.merchantIdOf(productId), productId, imageId);
   }
 
-  /** Активировать товар после прихода — делает его продаваемым. */
+  /** Активировать карточку после прихода/модерации — делает её продаваемой. */
   async adminActivate(id: string) {
     const updated = await this.prisma.product.update({
       where: { id },
       data: { status: ProductStatus.ACTIVE, publishedAt: new Date() },
-      include: PRODUCT_INCLUDE,
     });
     this.emitIndexed(id);
     return updated;
@@ -697,10 +776,14 @@ export class ProductsService {
   private async ensureOwnership(merchantId: string, productId: string): Promise<void> {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, deletedAt: null },
-      select: { merchantId: true },
+      select: {
+        createdByMerchantId: true,
+        offers: { where: { merchantId }, take: 1, select: { id: true } },
+      },
     });
     if (!product) throw new NotFoundException('Product not found');
-    if (product.merchantId !== merchantId) throw new ForbiddenException('Not your product');
+    const owns = product.createdByMerchantId === merchantId || product.offers.length > 0;
+    if (!owns) throw new ForbiddenException('Not your product');
   }
 
   private toSlug(s: string): string {

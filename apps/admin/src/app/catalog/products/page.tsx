@@ -99,7 +99,10 @@ function Inner() {
                     </Badge>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {p.sku} · {formatPrice(p.price)} · {p.merchant?.brandName ?? ''}
+                    {p.minPrice ? `от ${formatPrice(p.minPrice)}` : formatPrice(p.price)}
+                    {' · '}
+                    {p.offersCount} предлож.
+                    {p.sellerCount > 1 ? ` · ${p.sellerCount} продав.` : ''}
                   </div>
                 </Link>
                 <div className="flex gap-2">

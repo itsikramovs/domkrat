@@ -26,11 +26,14 @@ import { ReceiptNumberingService } from '../receipt-numbering.service';
 
 type Tx = Prisma.TransactionClient;
 
+/** Резолв (productId,merchantId) → конкретное предложение продавца для приёмки. */
+type ResolvedOffer = { offerId: string; productId: string; variantId: string; merchantId: string };
+
 /**
  * Цикл приёмки (приходование) по docs/05-BUSINESS-FLOWS §3.1:
  * DRAFT → (submit) EXPECTED → (receive) ARRIVED → (qualityCheck) CHECKING/PLACING
  *        → (placement) размещение по ячейкам → COMPLETED.
- * На размещении пишутся StockMovement(RECEIPT) и InventoryBalance (по ячейке + агрегат).
+ * Остаток ведётся по предложению (offerId): запись по ячейке + агрегат cellId=null.
  */
 @Injectable()
 export class ReceiptsService {
@@ -71,7 +74,12 @@ export class ReceiptsService {
       where: { id },
       include: {
         warehouse: { select: { id: true, code: true, name: true } },
-        items: { include: { product: { select: { sku: true, name: true } } } },
+        items: {
+          include: {
+            product: { select: { name: true } },
+            offer: { select: { sku: true } },
+          },
+        },
       },
     });
     if (!r) throw new NotFoundException('Приёмка не найдена');
@@ -79,21 +87,19 @@ export class ReceiptsService {
     return r;
   }
 
-  /** Шаг 1: создание приёмки (DRAFT). */
+  /** Шаг 1: создание приёмки (DRAFT). Каждой строке резолвится предложение продавца. */
   async create(merchantId: string, dto: CreateReceiptDto) {
     const warehouse = await this.prisma.warehouse.findUnique({ where: { id: dto.warehouseId } });
     if (!warehouse) throw new NotFoundException('Склад не найден');
-    // принимать можно на свой склад (FBS) либо на платформенный (FBO)
     if (warehouse.merchantId !== merchantId && warehouse.type !== WarehouseType.PLATFORM) {
       throw new ForbiddenException('Нельзя принимать на этот склад');
     }
 
-    const productIds = dto.items.map((i) => i.productId);
-    const owned = await this.prisma.product.count({
-      where: { id: { in: productIds }, merchantId },
-    });
-    if (owned !== new Set(productIds).size) {
-      throw new BadRequestException('Все товары приёмки должны принадлежать мерчанту');
+    const resolved = new Map<string, ResolvedOffer>();
+    for (const i of dto.items) {
+      if (!resolved.has(i.productId)) {
+        resolved.set(i.productId, await this.resolveDefaultOffer(i.productId, merchantId));
+      }
     }
 
     const totalQuantity = dto.items.reduce((s, i) => s + i.expectedQuantity, 0);
@@ -115,11 +121,16 @@ export class ReceiptsService {
         expectedAt: dto.expectedAt ? new Date(dto.expectedAt) : null,
         notes: dto.notes,
         items: {
-          create: dto.items.map((i) => ({
-            productId: i.productId,
-            expectedQuantity: i.expectedQuantity,
-            unitCost: i.unitCost ?? null,
-          })),
+          create: dto.items.map((i) => {
+            const off = resolved.get(i.productId)!;
+            return {
+              productId: i.productId,
+              offerId: off.offerId,
+              variantId: off.variantId,
+              expectedQuantity: i.expectedQuantity,
+              unitCost: i.unitCost ?? null,
+            };
+          }),
         },
       },
       include: { items: true },
@@ -127,13 +138,12 @@ export class ReceiptsService {
   }
 
   /**
-   * Быстрый приход в один шаг (для админ-панели): создаёт завершённую приёмку на один товар
-   * и сразу размещает его на ячейку. Возвращает приёмку. Делает товар физически на складе и
-   * продаваемым (агрегатный InventoryBalance). НЕ меняет статус товара — это делает вызывающий.
+   * Быстрый приход в один шаг (для админ-панели): создаёт завершённую приёмку на одно
+   * предложение и сразу размещает его на ячейку. Делает товар физически на складе и
+   * продаваемым (агрегат InventoryBalance по offerId). НЕ меняет статус карточки.
    */
   async quickReceiveAndPlace(params: {
-    merchantId: string;
-    productId: string;
+    offerId: string;
     warehouseId: string;
     cellId: string;
     quantity: number;
@@ -141,32 +151,10 @@ export class ReceiptsService {
     performedById: string;
   }) {
     if (params.quantity <= 0) throw new BadRequestException('Количество должно быть больше 0');
+    const offer = await this.requireOffer(params.offerId);
 
-    const product = await this.prisma.product.findFirst({
-      where: { id: params.productId, merchantId: params.merchantId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!product) throw new NotFoundException('Товар не найден у этого мерчанта');
-
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: params.warehouseId } });
-    if (!warehouse) throw new NotFoundException('Склад не найден');
-    if (warehouse.merchantId !== params.merchantId && warehouse.type !== WarehouseType.PLATFORM) {
-      throw new ForbiddenException('Нельзя принимать на этот склад');
-    }
-
-    const cell = await this.prisma.warehouseCell.findUnique({
-      where: { id: params.cellId },
-      include: { shelf: { include: { rack: { include: { zone: true } } } } },
-    });
-    if (!cell) throw new NotFoundException('Ячейка не найдена');
-    if (cell.shelf.rack.zone.warehouseId !== params.warehouseId) {
-      throw new BadRequestException('Ячейка не из выбранного склада');
-    }
-    if (cell.isBlocked || !cell.isActive)
-      throw new ConflictException(`Ячейка ${cell.code} недоступна`);
-    if (cell.merchantId && cell.merchantId !== params.merchantId) {
-      throw new ForbiddenException(`Ячейка ${cell.code} арендована другим мерчантом`);
-    }
+    await this.assertWarehouseAccess(params.warehouseId, offer.merchantId);
+    await this.assertCell(params.cellId, params.warehouseId, offer.merchantId);
 
     const unitCost =
       params.unitCost != null && params.unitCost !== '' ? new Decimal(params.unitCost) : null;
@@ -177,7 +165,7 @@ export class ReceiptsService {
       const receipt = await tx.stockReceipt.create({
         data: {
           receiptNumber,
-          merchantId: params.merchantId,
+          merchantId: offer.merchantId,
           warehouseId: params.warehouseId,
           status: ReceiptStatus.COMPLETED,
           qualityCheckStatus: QualityCheckStatus.PASSED,
@@ -191,7 +179,9 @@ export class ReceiptsService {
           items: {
             create: [
               {
-                productId: params.productId,
+                productId: offer.productId,
+                offerId: offer.offerId,
+                variantId: offer.variantId,
                 expectedQuantity: params.quantity,
                 receivedQuantity: params.quantity,
                 acceptedQuantity: params.quantity,
@@ -208,8 +198,7 @@ export class ReceiptsService {
       });
 
       await this.addStock(tx, {
-        productId: params.productId,
-        merchantId: params.merchantId,
+        offer,
         cellId: params.cellId,
         warehouseId: params.warehouseId,
         quantity: params.quantity,
@@ -223,15 +212,14 @@ export class ReceiptsService {
   }
 
   /**
-   * Многострочный приход в один шаг (админ): одна завершённая приёмка на несколько товаров,
-   * каждый размещается на свою ячейку. Возвращает приёмку. Активацию товаров делает вызывающий.
+   * Многострочный приход в один шаг (админ): одна завершённая приёмка на несколько
+   * предложений, каждое размещается на свою ячейку. Активацию карточек делает вызывающий.
    */
   async quickReceiveMany(params: {
-    merchantId: string;
     warehouseId: string;
     performedById: string;
     items: Array<{
-      productId: string;
+      offerId: string;
       cellId: string;
       quantity: number;
       unitCost?: number | string | null;
@@ -239,34 +227,33 @@ export class ReceiptsService {
   }) {
     if (params.items.length === 0) throw new BadRequestException('Добавьте хотя бы одну позицию');
 
-    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: params.warehouseId } });
-    if (!warehouse) throw new NotFoundException('Склад не найден');
-    if (warehouse.merchantId !== params.merchantId && warehouse.type !== WarehouseType.PLATFORM) {
-      throw new ForbiddenException('Нельзя принимать на этот склад');
+    const offers = new Map<string, ResolvedOffer>();
+    for (const it of params.items) {
+      if (it.quantity <= 0) throw new BadRequestException('Количество должно быть больше 0');
+      if (!offers.has(it.offerId)) offers.set(it.offerId, await this.requireOffer(it.offerId));
     }
-
-    const productIds = [...new Set(params.items.map((i) => i.productId))];
-    const owned = await this.prisma.product.count({
-      where: { id: { in: productIds }, merchantId: params.merchantId, deletedAt: null },
-    });
-    if (owned !== productIds.length) {
-      throw new BadRequestException('Все товары должны принадлежать мерчанту');
+    // все предложения одной приёмки должны принадлежать одному мерчанту (один склад)
+    const merchantIds = new Set([...offers.values()].map((o) => o.merchantId));
+    if (merchantIds.size > 1) {
+      throw new BadRequestException('Все позиции приёмки должны быть одного продавца');
     }
+    const merchantId = [...merchantIds][0]!;
+    await this.assertWarehouseAccess(params.warehouseId, merchantId);
 
+    const cellIds = [...new Set(params.items.map((i) => i.cellId))];
     const cells = await this.prisma.warehouseCell.findMany({
-      where: { id: { in: [...new Set(params.items.map((i) => i.cellId))] } },
+      where: { id: { in: cellIds } },
       include: { shelf: { include: { rack: { include: { zone: true } } } } },
     });
     const cellMap = new Map(cells.map((c) => [c.id, c]));
     for (const it of params.items) {
-      if (it.quantity <= 0) throw new BadRequestException('Количество должно быть больше 0');
       const cell = cellMap.get(it.cellId);
       if (!cell) throw new NotFoundException('Ячейка не найдена');
       if (cell.shelf.rack.zone.warehouseId !== params.warehouseId)
         throw new BadRequestException(`Ячейка ${cell.code} не из выбранного склада`);
       if (cell.isBlocked || !cell.isActive)
         throw new ConflictException(`Ячейка ${cell.code} недоступна`);
-      if (cell.merchantId && cell.merchantId !== params.merchantId)
+      if (cell.merchantId && cell.merchantId !== merchantId)
         throw new ForbiddenException(`Ячейка ${cell.code} арендована другим мерчантом`);
     }
 
@@ -283,7 +270,7 @@ export class ReceiptsService {
       const receipt = await tx.stockReceipt.create({
         data: {
           receiptNumber,
-          merchantId: params.merchantId,
+          merchantId,
           warehouseId: params.warehouseId,
           status: ReceiptStatus.COMPLETED,
           qualityCheckStatus: QualityCheckStatus.PASSED,
@@ -295,15 +282,20 @@ export class ReceiptsService {
           receivedAt: now,
           notes: 'Многострочный приход из админ-панели',
           items: {
-            create: params.items.map((i) => ({
-              productId: i.productId,
-              expectedQuantity: i.quantity,
-              receivedQuantity: i.quantity,
-              acceptedQuantity: i.quantity,
-              rejectedQuantity: 0,
-              unitCost: cost(i.unitCost),
-              placedInCells: { [i.cellId]: i.quantity } as unknown as Prisma.InputJsonValue,
-            })),
+            create: params.items.map((i) => {
+              const off = offers.get(i.offerId)!;
+              return {
+                productId: off.productId,
+                offerId: off.offerId,
+                variantId: off.variantId,
+                expectedQuantity: i.quantity,
+                receivedQuantity: i.quantity,
+                acceptedQuantity: i.quantity,
+                rejectedQuantity: 0,
+                unitCost: cost(i.unitCost),
+                placedInCells: { [i.cellId]: i.quantity } as unknown as Prisma.InputJsonValue,
+              };
+            }),
           },
         },
         include: { items: true },
@@ -311,8 +303,7 @@ export class ReceiptsService {
 
       for (const i of params.items) {
         await this.addStock(tx, {
-          productId: i.productId,
-          merchantId: params.merchantId,
+          offer: offers.get(i.offerId)!,
           cellId: i.cellId,
           warehouseId: params.warehouseId,
           quantity: i.quantity,
@@ -421,10 +412,12 @@ export class ReceiptsService {
     const items = new Map(r.items.map((it) => [it.id, it]));
 
     return this.prisma.$transaction(async (tx) => {
-      // already-placed считаем из placedInCells
       for (const p of dto.placements) {
         const item = items.get(p.itemId);
         if (!item) throw new BadRequestException(`Строка ${p.itemId} не из этой приёмки`);
+        if (!item.offerId || !item.variantId) {
+          throw new BadRequestException('У строки приёмки нет предложения (offerId)');
+        }
 
         const cell = await tx.warehouseCell.findUnique({
           where: { id: p.cellId },
@@ -448,8 +441,12 @@ export class ReceiptsService {
         }
 
         await this.addStock(tx, {
-          productId: item.productId,
-          merchantId,
+          offer: {
+            offerId: item.offerId,
+            productId: item.productId,
+            variantId: item.variantId,
+            merchantId,
+          },
           cellId: cell.id,
           warehouseId: r.warehouseId,
           quantity: p.quantity,
@@ -466,7 +463,6 @@ export class ReceiptsService {
         item.placedInCells = nextPlaced as unknown as typeof item.placedInCells;
       }
 
-      // полностью ли размещено всё принятое?
       const fresh = await tx.stockReceiptItem.findMany({ where: { receiptId: r.id } });
       const allPlaced = fresh.every(
         (it) => this.placedCount(it.placedInCells) >= it.acceptedQuantity,
@@ -483,14 +479,13 @@ export class ReceiptsService {
   }
 
   /**
-   * Добавляет остаток: запись по ячейке (физика) + агрегат cellId=null (доступно к продаже,
-   * именно его списывает оформление заказа). Пишет StockMovement(RECEIPT).
+   * Добавляет остаток: запись по ячейке (физика, upsert по offerId_cellId) + агрегат
+   * cellId=null (доступно к продаже, его списывает оформление заказа). StockMovement(RECEIPT).
    */
   private async addStock(
     tx: Tx,
     p: {
-      productId: string;
-      merchantId: string;
+      offer: ResolvedOffer;
       cellId: string;
       warehouseId: string;
       quantity: number;
@@ -500,18 +495,16 @@ export class ReceiptsService {
     },
   ): Promise<void> {
     const now = new Date();
-    // 1) по ячейке (cellId задан → upsert по compound unique)
+    const { offerId, variantId, productId, merchantId } = p.offer;
+
+    // 1) по ячейке (cellId задан → upsert по compound unique offerId_cellId)
     await tx.inventoryBalance.upsert({
-      where: {
-        productId_merchantId_cellId: {
-          productId: p.productId,
-          merchantId: p.merchantId,
-          cellId: p.cellId,
-        },
-      },
+      where: { offerId_cellId: { offerId, cellId: p.cellId } },
       create: {
-        productId: p.productId,
-        merchantId: p.merchantId,
+        productId,
+        offerId,
+        variantId,
+        merchantId,
         warehouseId: p.warehouseId,
         cellId: p.cellId,
         quantityAvailable: p.quantity,
@@ -524,16 +517,18 @@ export class ReceiptsService {
       },
     });
 
-    // 2) агрегат к продаже (cellId = null) — NULL не уникален в Postgres, потому updateMany→create
+    // 2) агрегат к продаже (cellId = null) — NULL не уникален, потому updateMany→create
     const updated = await tx.inventoryBalance.updateMany({
-      where: { productId: p.productId, merchantId: p.merchantId, cellId: null },
+      where: { offerId, cellId: null },
       data: { quantityAvailable: { increment: p.quantity }, lastReceivedAt: now },
     });
     if (updated.count === 0) {
       await tx.inventoryBalance.create({
         data: {
-          productId: p.productId,
-          merchantId: p.merchantId,
+          productId,
+          offerId,
+          variantId,
+          merchantId,
           warehouseId: p.warehouseId,
           cellId: null,
           quantityAvailable: p.quantity,
@@ -546,8 +541,10 @@ export class ReceiptsService {
     // 3) движение
     await tx.stockMovement.create({
       data: {
-        productId: p.productId,
-        merchantId: p.merchantId,
+        productId,
+        offerId,
+        variantId,
+        merchantId,
         movementType: 'RECEIPT',
         quantity: p.quantity,
         toCellId: p.cellId,
@@ -557,6 +554,64 @@ export class ReceiptsService {
         performedById: p.performedById,
       },
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // helpers
+  // -------------------------------------------------------------------------
+
+  private async requireOffer(offerId: string): Promise<ResolvedOffer> {
+    const offer = await this.prisma.productOffer.findFirst({
+      where: { id: offerId, deletedAt: null },
+      select: { id: true, productId: true, variantId: true, merchantId: true },
+    });
+    if (!offer) throw new NotFoundException('Предложение не найдено');
+    return {
+      offerId: offer.id,
+      productId: offer.productId,
+      variantId: offer.variantId,
+      merchantId: offer.merchantId,
+    };
+  }
+
+  private async resolveDefaultOffer(productId: string, merchantId: string): Promise<ResolvedOffer> {
+    const offer = await this.prisma.productOffer.findFirst({
+      where: { productId, merchantId, deletedAt: null, variant: { isDefault: true } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, productId: true, variantId: true, merchantId: true },
+    });
+    if (!offer)
+      throw new BadRequestException('У товара нет предложения этого продавца для приёмки');
+    return {
+      offerId: offer.id,
+      productId: offer.productId,
+      variantId: offer.variantId,
+      merchantId: offer.merchantId,
+    };
+  }
+
+  private async assertWarehouseAccess(warehouseId: string, merchantId: string): Promise<void> {
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { id: warehouseId } });
+    if (!warehouse) throw new NotFoundException('Склад не найден');
+    if (warehouse.merchantId !== merchantId && warehouse.type !== WarehouseType.PLATFORM) {
+      throw new ForbiddenException('Нельзя принимать на этот склад');
+    }
+  }
+
+  private async assertCell(cellId: string, warehouseId: string, merchantId: string): Promise<void> {
+    const cell = await this.prisma.warehouseCell.findUnique({
+      where: { id: cellId },
+      include: { shelf: { include: { rack: { include: { zone: true } } } } },
+    });
+    if (!cell) throw new NotFoundException('Ячейка не найдена');
+    if (cell.shelf.rack.zone.warehouseId !== warehouseId) {
+      throw new BadRequestException('Ячейка не из выбранного склада');
+    }
+    if (cell.isBlocked || !cell.isActive)
+      throw new ConflictException(`Ячейка ${cell.code} недоступна`);
+    if (cell.merchantId && cell.merchantId !== merchantId) {
+      throw new ForbiddenException(`Ячейка ${cell.code} арендована другим мерчантом`);
+    }
   }
 
   private placedCount(placedInCells: Prisma.JsonValue | null): number {

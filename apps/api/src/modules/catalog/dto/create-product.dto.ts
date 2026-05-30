@@ -148,8 +148,15 @@ export class AdminCreateProductDto extends CreateProductDto {
   merchantId!: string;
 }
 
-/** Быстрый приход (оприходование) товара админом: приёмка → размещение на ячейку → товар становится продаваемым. */
+/** Быстрый приход (оприходование) предложения админом: приёмка → размещение на ячейку → продаётся. */
 export class ReceiveProductDto {
+  @ApiPropertyOptional({
+    description: 'Предложение продавца; если не указано — дефолтное на карточке',
+  })
+  @IsOptional()
+  @IsUUID()
+  offerId?: string;
+
   @ApiProperty()
   @IsUUID()
   warehouseId!: string;
@@ -170,11 +177,11 @@ export class ReceiveProductDto {
   unitCost?: number;
 }
 
-/** Одна строка многострочной приёмки. */
+/** Одна строка многострочной приёмки (на предложение продавца). */
 export class ReceiveBatchItemDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Предложение продавца' })
   @IsUUID()
-  productId!: string;
+  offerId!: string;
 
   @ApiProperty()
   @IsUUID()
@@ -192,12 +199,8 @@ export class ReceiveBatchItemDto {
   unitCost?: number;
 }
 
-/** Многострочная приёмка админом: один склад, мерчант, несколько товаров → размещение + активация. */
+/** Многострочная приёмка админом: один склад, несколько предложений → размещение + активация. */
 export class ReceiveBatchDto {
-  @ApiProperty()
-  @IsUUID()
-  merchantId!: string;
-
   @ApiProperty()
   @IsUUID()
   warehouseId!: string;

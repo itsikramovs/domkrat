@@ -132,7 +132,7 @@ export class AdminMerchantsService {
         include: {
           user: { select: { email: true, phone: true, firstName: true, lastName: true } },
           balance: true,
-          _count: { select: { products: true, documents: true } },
+          _count: { select: { productOffers: true, documents: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
@@ -151,7 +151,7 @@ export class AdminMerchantsService {
         balance: true,
         documents: { orderBy: { uploadedAt: 'desc' } },
         contracts: true,
-        _count: { select: { products: true } },
+        _count: { select: { productOffers: true } },
       },
     });
     if (!m) throw new NotFoundException('Merchant not found');

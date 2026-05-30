@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProductStatus } from '@prisma/client';
+import { Prisma, ProductOfferStatus, ProductStatus } from '@prisma/client';
 import Decimal from 'decimal.js';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -13,22 +13,30 @@ const CART_TTL_DAYS = 30;
 const CART_ITEMS_INCLUDE = Prisma.validator<Prisma.CartInclude>()({
   items: {
     include: {
-      product: {
+      offer: {
         select: {
           id: true,
           merchantId: true,
-          categoryId: true,
           sku: true,
-          slug: true,
-          name: true,
           price: true,
           vatRate: true,
           status: true,
           deletedAt: true,
-          images: {
-            where: { isPrimary: true },
-            take: 1,
-            select: { url: true, thumbnailUrl: true },
+          variant: { select: { id: true, name: true } },
+          product: {
+            select: {
+              id: true,
+              categoryId: true,
+              slug: true,
+              name: true,
+              status: true,
+              deletedAt: true,
+              images: {
+                where: { isPrimary: true },
+                take: 1,
+                select: { url: true, thumbnailUrl: true },
+              },
+            },
           },
         },
       },
@@ -38,6 +46,7 @@ const CART_ITEMS_INCLUDE = Prisma.validator<Prisma.CartInclude>()({
 });
 
 type CartWithItems = Prisma.CartGetPayload<{ include: typeof CART_ITEMS_INCLUDE }>;
+type CartItemRow = CartWithItems['items'][number];
 
 @Injectable()
 export class CartService {
@@ -62,7 +71,6 @@ export class CartService {
         include: CART_ITEMS_INCLUDE,
       });
     } else if (cart.expiresAt < new Date()) {
-      // Срок истёк — очистим
       cart = await this.prisma.cart.update({
         where: { id: cart.id },
         data: { expiresAt, items: { deleteMany: {} } },
@@ -74,22 +82,32 @@ export class CartService {
   }
 
   async addItem(userId: string, dto: AddCartItemDto) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: dto.productId, deletedAt: null, status: ProductStatus.ACTIVE },
-      select: { id: true, price: true },
+    // Принимаем новый offerId либо legacy productId (→ основное предложение).
+    const offerId = dto.offerId ?? (await this.resolvePrimaryOfferId(dto.productId));
+    if (!offerId) throw new NotFoundException('Product not available');
+
+    const offer = await this.prisma.productOffer.findFirst({
+      where: {
+        id: offerId,
+        deletedAt: null,
+        status: ProductOfferStatus.ACTIVE,
+        product: { status: ProductStatus.ACTIVE, deletedAt: null },
+      },
+      select: { id: true, price: true, productId: true },
     });
-    if (!product) throw new NotFoundException('Product not available');
+    if (!offer) throw new NotFoundException('Product not available');
 
     const cart = await this.getOrCreateRaw(userId);
 
     await this.prisma.cartItem.upsert({
-      where: { cartId_productId: { cartId: cart.id, productId: dto.productId } },
-      update: { quantity: { increment: dto.quantity }, priceAtAdded: product.price },
+      where: { cartId_offerId: { cartId: cart.id, offerId: offer.id } },
+      update: { quantity: { increment: dto.quantity }, priceAtAdded: offer.price },
       create: {
         cartId: cart.id,
-        productId: dto.productId,
+        offerId: offer.id,
+        productId: offer.productId,
         quantity: dto.quantity,
-        priceAtAdded: product.price,
+        priceAtAdded: offer.price,
       },
     });
 
@@ -164,24 +182,83 @@ export class CartService {
     });
   }
 
+  /** Резолвит «основное предложение» по productId: ACTIVE, сначала с остатком, затем дешевле. */
+  private async resolvePrimaryOfferId(productId?: string): Promise<string | null> {
+    if (!productId) return null;
+    const offers = await this.prisma.productOffer.findMany({
+      where: {
+        productId,
+        status: ProductOfferStatus.ACTIVE,
+        deletedAt: null,
+        product: { status: ProductStatus.ACTIVE, deletedAt: null },
+      },
+      orderBy: [{ price: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+    if (offers.length === 0) return null;
+    const stock = await this.prisma.inventoryBalance.groupBy({
+      by: ['offerId'],
+      where: { offerId: { in: offers.map((o) => o.id) }, cellId: null },
+      _sum: { quantityAvailable: true },
+    });
+    const inStock = new Set(
+      stock.filter((s) => (s._sum.quantityAvailable ?? 0) > 0).map((s) => s.offerId),
+    );
+    return (offers.find((o) => inStock.has(o.id)) ?? offers[0]).id;
+  }
+
   private toEvalItems(cart: CartWithItems) {
-    return cart.items.map((i) => ({
-      categoryId: i.product.categoryId,
-      merchantId: i.product.merchantId,
-      lineSubtotal: new Decimal(i.product.price.toString()).times(i.quantity),
-    }));
+    return cart.items
+      .filter((i) => i.offer)
+      .map((i) => ({
+        categoryId: i.offer!.product.categoryId,
+        merchantId: i.offer!.merchantId,
+        lineSubtotal: new Decimal(i.offer!.price.toString()).times(i.quantity),
+      }));
+  }
+
+  /** Собирает legacy-форму product (name/slug/images + price/sku/vatRate из предложения). */
+  private mapItem(i: CartItemRow) {
+    const o = i.offer;
+    const product = o
+      ? {
+          id: o.product.id,
+          sku: o.sku,
+          slug: o.product.slug,
+          name: o.product.name,
+          price: o.price,
+          vatRate: o.vatRate,
+          merchantId: o.merchantId,
+          categoryId: o.product.categoryId,
+          status: o.product.status,
+          deletedAt: o.product.deletedAt,
+          images: o.product.images,
+        }
+      : null;
+    return {
+      id: i.id,
+      cartId: i.cartId,
+      offerId: i.offerId,
+      productId: i.productId,
+      quantity: i.quantity,
+      priceAtAdded: i.priceAtAdded,
+      createdAt: i.createdAt,
+      product,
+      variant: o?.variant ?? null,
+    };
   }
 
   private async withBreakdown(cart: CartWithItems) {
-    const priceable = cart.items.map((i) => ({
-      unitPrice: i.product.price,
+    const live = cart.items.filter((i) => i.offer);
+    const priceable = live.map((i) => ({
+      unitPrice: i.offer!.price,
       quantity: i.quantity,
-      vatRate: i.product.vatRate,
+      vatRate: i.offer!.vatRate,
     }));
 
     // Если в корзине лежит промокод — пересчитываем скидку (код мог истечь/исчерпаться).
     let promo: PromoEvaluation | null = null;
-    if (cart.promoCode && cart.items.length > 0 && cart.userId) {
+    if (cart.promoCode && live.length > 0 && cart.userId) {
       promo = await this.promoCodes.evaluate(cart.promoCode, cart.userId, this.toEvalItems(cart));
     }
 
@@ -193,7 +270,7 @@ export class CartService {
       currency: cart.currency,
       expiresAt: cart.expiresAt,
       itemsCount: cart.items.reduce((n, i) => n + i.quantity, 0),
-      items: cart.items,
+      items: cart.items.map((i) => this.mapItem(i)),
       promo: promo
         ? {
             code: promo.code,

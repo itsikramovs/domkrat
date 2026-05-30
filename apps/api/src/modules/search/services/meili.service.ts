@@ -147,6 +147,12 @@ export class MeiliService implements OnModuleInit {
         brand: true,
         category: true,
         images: { orderBy: { position: 'asc' }, take: 1 },
+        offers: {
+          where: { status: 'ACTIVE', deletedAt: null },
+          orderBy: { price: 'asc' },
+          take: 1,
+          select: { price: true, sku: true },
+        },
       },
     });
     const docs = products.map((p) => this.toDoc(p));
@@ -164,6 +170,12 @@ export class MeiliService implements OnModuleInit {
         brand: true,
         category: true,
         images: { orderBy: { position: 'asc' }, take: 1 },
+        offers: {
+          where: { status: 'ACTIVE', deletedAt: null },
+          orderBy: { price: 'asc' },
+          take: 1,
+          select: { price: true, sku: true },
+        },
       },
     });
     return p ? this.toDoc(p) : null;
@@ -171,12 +183,11 @@ export class MeiliService implements OnModuleInit {
 
   private toDoc(p: {
     id: string;
-    sku: string;
     slug: string;
     name: unknown;
     description: unknown;
     oemNumber: string | null;
-    price: unknown;
+    minPrice: unknown | null;
     rating: unknown;
     reviewsCount: number;
     isFeatured: boolean;
@@ -184,13 +195,15 @@ export class MeiliService implements OnModuleInit {
     brand: { name: string } | null;
     category: { name: unknown; slug: string };
     images: Array<{ url: string }>;
+    offers: Array<{ price: unknown; sku: string }>;
   }): ProductIndexDoc {
     const name = (p.name as { ru?: string; uz?: string }) ?? {};
     const desc = (p.description as { ru?: string; uz?: string } | null) ?? {};
     const categoryName = (p.category.name as { ru?: string; uz?: string }) ?? {};
+    const primary = p.offers[0];
     return {
       id: p.id,
-      sku: p.sku,
+      sku: primary?.sku ?? '',
       slug: p.slug,
       nameRu: name.ru ?? '',
       nameUz: name.uz ?? '',
@@ -199,7 +212,7 @@ export class MeiliService implements OnModuleInit {
       brand: p.brand?.name ?? null,
       category: categoryName.ru ?? null,
       categorySlug: p.category.slug,
-      price: Number(p.price),
+      price: Number(primary?.price ?? p.minPrice ?? 0),
       rating: Number(p.rating),
       reviewsCount: p.reviewsCount,
       isFeatured: p.isFeatured,

@@ -126,7 +126,7 @@ export class AlertsService {
       where: { merchantId, status },
       orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
       take: 200,
-      include: { product: { select: { sku: true, name: true } } },
+      include: { product: { select: { name: true } }, offer: { select: { sku: true } } },
     });
   }
 
@@ -136,7 +136,8 @@ export class AlertsService {
       orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
       take: 300,
       include: {
-        product: { select: { sku: true, name: true } },
+        product: { select: { name: true } },
+        offer: { select: { sku: true } },
         merchant: { select: { brandName: true } },
       },
     });

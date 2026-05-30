@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { DeliveryMethodType, PaymentMethod, ProductStatus } from '@prisma/client';
 import { mockDeep, type DeepMockProxy } from 'jest-mock-extended';
@@ -51,7 +47,7 @@ describe('OrdersService.createFromCart — validation', () => {
   it('бросает BadRequestException если courier без deliveryAddressId', async () => {
     prisma.cart.findUnique.mockResolvedValue({
       id: 'c1',
-      items: [{ product: {} }],
+      items: [{ offer: { product: {} } }],
     } as never);
     const dto = { ...baseDto, deliveryAddressId: undefined };
     await expect(service.createFromCart('user-1', dto)).rejects.toThrow(BadRequestException);
@@ -60,7 +56,16 @@ describe('OrdersService.createFromCart — validation', () => {
   it('бросает ForbiddenException если адрес не принадлежит пользователю', async () => {
     prisma.cart.findUnique.mockResolvedValue({
       id: 'c1',
-      items: [{ product: { sku: 'X', status: ProductStatus.ACTIVE, deletedAt: null } }],
+      items: [
+        {
+          offer: {
+            sku: 'X',
+            status: 'ACTIVE',
+            deletedAt: null,
+            product: { status: ProductStatus.ACTIVE, deletedAt: null },
+          },
+        },
+      ],
     } as never);
     prisma.userAddress.findFirst.mockResolvedValue(null);
     await expect(service.createFromCart('user-1', baseDto)).rejects.toThrow(ForbiddenException);
@@ -71,7 +76,30 @@ describe('OrdersService.createFromCart — validation', () => {
       id: 'c1',
       items: [
         {
-          product: { sku: 'OUT', status: ProductStatus.INACTIVE, deletedAt: null },
+          offer: {
+            sku: 'OUT',
+            status: 'ACTIVE',
+            deletedAt: null,
+            product: { status: ProductStatus.INACTIVE, deletedAt: null },
+          },
+        },
+      ],
+    } as never);
+    prisma.userAddress.findFirst.mockResolvedValue({ id: 'addr-1' } as never);
+    await expect(service.createFromCart('user-1', baseDto)).rejects.toThrow(ConflictException);
+  });
+
+  it('бросает ConflictException если предложение неактивно', async () => {
+    prisma.cart.findUnique.mockResolvedValue({
+      id: 'c1',
+      items: [
+        {
+          offer: {
+            sku: 'INACT',
+            status: 'INACTIVE',
+            deletedAt: null,
+            product: { status: ProductStatus.ACTIVE, deletedAt: null },
+          },
         },
       ],
     } as never);
@@ -84,7 +112,12 @@ describe('OrdersService.createFromCart — validation', () => {
       id: 'c1',
       items: [
         {
-          product: { sku: 'DEL', status: ProductStatus.ACTIVE, deletedAt: new Date() },
+          offer: {
+            sku: 'DEL',
+            status: 'ACTIVE',
+            deletedAt: null,
+            product: { status: ProductStatus.ACTIVE, deletedAt: new Date() },
+          },
         },
       ],
     } as never);

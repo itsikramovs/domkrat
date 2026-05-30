@@ -129,7 +129,7 @@ function MerchantsInner() {
                     <Badge variant="outline">{m.verificationStatus}</Badge>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    {m.legalName} · ИНН {m.taxId ?? '—'} · {m._count.products} товаров
+                    {m.legalName} · ИНН {m.taxId ?? '—'} · {m._count.productOffers} предложений
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Владелец: {m.user.firstName} {m.user.lastName} ({m.user.email ?? m.user.phone})

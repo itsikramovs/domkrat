@@ -19,8 +19,8 @@ import {
   useWarehouseCells,
 } from '@/lib/api/products';
 
-type Row = { productId: string; cellId: string; quantity: string; unitCost: string };
-const emptyRow = (): Row => ({ productId: '', cellId: '', quantity: '', unitCost: '' });
+type Row = { offerId: string; cellId: string; quantity: string; unitCost: string };
+const emptyRow = (): Row => ({ offerId: '', cellId: '', quantity: '', unitCost: '' });
 const selectCls =
   'h-10 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground';
 
@@ -58,9 +58,9 @@ function Inner() {
 
   async function submit() {
     const items = rows
-      .filter((r) => r.productId && r.cellId && Number(r.quantity) > 0)
+      .filter((r) => r.offerId && r.cellId && Number(r.quantity) > 0)
       .map((r) => ({
-        productId: r.productId,
+        offerId: r.offerId,
         cellId: r.cellId,
         quantity: Number(r.quantity),
         unitCost: r.unitCost ? Number(r.unitCost) : undefined,
@@ -70,7 +70,7 @@ function Inner() {
       return;
     }
     try {
-      const res = (await receive.mutateAsync({ merchantId, warehouseId, items })) as {
+      const res = (await receive.mutateAsync({ warehouseId, items })) as {
         activated: number;
       };
       toast.success(`Принято и активировано товаров: ${res.activated}`);
@@ -155,15 +155,19 @@ function Inner() {
               <div key={i} className="grid gap-2 md:grid-cols-[1fr_140px_90px_110px_auto]">
                 <select
                   className={selectCls}
-                  value={row.productId}
-                  onChange={(e) => setRow(i, { productId: e.target.value })}
+                  value={row.offerId}
+                  onChange={(e) => setRow(i, { offerId: e.target.value })}
                 >
                   <option value="">— товар —</option>
-                  {productList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name.ru} ({p.sku})
-                    </option>
-                  ))}
+                  {productList.map((p) => {
+                    const off = p.offers.find((o) => o.merchantId === merchantId);
+                    if (!off) return null;
+                    return (
+                      <option key={p.id} value={off.id}>
+                        {p.name.ru} ({off.sku})
+                      </option>
+                    );
+                  })}
                 </select>
                 <select
                   className={selectCls}

@@ -29,6 +29,8 @@ const SUB_ORDER_INCLUDE = {
     select: {
       id: true,
       productId: true,
+      offerId: true,
+      variantId: true,
       quantity: true,
       unitPrice: true,
       subtotal: true,
@@ -120,14 +122,22 @@ export class MerchantOrdersService {
    */
   private async deductFromCellsFifo(
     tx: Prisma.TransactionClient,
-    productId: string,
-    merchantId: string,
+    item: {
+      offerId: string | null;
+      variantId: string | null;
+      productId: string;
+      merchantId: string;
+    },
     quantity: number,
     ctx: { subOrderId: string; userId: string; reason: string },
   ): Promise<void> {
     let remaining = quantity;
+    const { offerId, variantId, productId, merchantId } = item;
+    const cellWhere: Prisma.InventoryBalanceWhereInput = offerId
+      ? { offerId, cellId: { not: null }, quantityAvailable: { gt: 0 } }
+      : { productId, merchantId, cellId: { not: null }, quantityAvailable: { gt: 0 } };
     const cells = await tx.inventoryBalance.findMany({
-      where: { productId, merchantId, cellId: { not: null }, quantityAvailable: { gt: 0 } },
+      where: cellWhere,
       orderBy: [{ oldestReceivedAt: 'asc' }, { lastReceivedAt: 'asc' }],
     });
 
@@ -141,6 +151,8 @@ export class MerchantOrdersService {
       await tx.stockMovement.create({
         data: {
           productId,
+          offerId,
+          variantId,
           merchantId,
           movementType: 'SHIPMENT',
           quantity: -take,
@@ -159,6 +171,8 @@ export class MerchantOrdersService {
       await tx.stockMovement.create({
         data: {
           productId,
+          offerId,
+          variantId,
           merchantId,
           movementType: 'SHIPMENT',
           quantity: -remaining,
@@ -219,16 +233,24 @@ export class MerchantOrdersService {
         if (cfg.to === OrderStatus.SHIPPED) {
           const items = await tx.orderItem.findMany({
             where: { subOrderId },
-            select: { productId: true, merchantId: true, quantity: true },
+            select: {
+              productId: true,
+              offerId: true,
+              variantId: true,
+              merchantId: true,
+              quantity: true,
+            },
           });
           for (const it of items) {
-            // снимаем резерв с агрегата
+            // снимаем резерв с агрегата предложения
             await tx.inventoryBalance.updateMany({
-              where: { productId: it.productId, merchantId: it.merchantId, cellId: null },
+              where: it.offerId
+                ? { offerId: it.offerId, cellId: null }
+                : { productId: it.productId, merchantId: it.merchantId, cellId: null },
               data: { quantityReserved: { decrement: it.quantity } },
             });
             // FIFO: физически списываем из ячеек, начиная с самой старой партии (ротация)
-            await this.deductFromCellsFifo(tx, it.productId, it.merchantId, it.quantity, {
+            await this.deductFromCellsFifo(tx, it, it.quantity, {
               subOrderId,
               userId,
               reason: cfg.reason,

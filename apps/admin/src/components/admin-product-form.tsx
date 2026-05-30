@@ -37,7 +37,7 @@ export function AdminProductForm({ initial, merchants, busy, submitLabel, onSubm
   const brands = useAdminBrands();
   const isEdit = Boolean(initial);
 
-  const [merchantId, setMerchantId] = useState(initial?.merchant.id ?? '');
+  const [merchantId, setMerchantId] = useState(initial?.merchant?.id ?? '');
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
   const [brandId, setBrandId] = useState(initial?.brandId ?? '');
   const [nameRu, setNameRu] = useState(initial?.name.ru ?? '');
@@ -99,11 +99,7 @@ export function AdminProductForm({ initial, merchants, busy, submitLabel, onSubm
                 ))}
               </select>
             </Field>
-          ) : (
-            <Field label="Мерчант">
-              <Input value={initial?.merchant.brandName ?? ''} disabled />
-            </Field>
-          )}
+          ) : null}
           <Field label="Категория *">
             {isEdit ? (
               <Input value={initial?.category.name.ru ?? ''} disabled />
@@ -149,15 +145,17 @@ export function AdminProductForm({ initial, merchants, busy, submitLabel, onSubm
           <Field label="Название (UZ)">
             <Input value={nameUz} onChange={(e) => setNameUz(e.target.value)} />
           </Field>
-          <Field label="Артикул (SKU) *">
-            <Input
-              required
-              className="font-mono"
-              value={sku}
-              onChange={(e) => setSku(e.target.value)}
-              placeholder="BOSCH-1457433721"
-            />
-          </Field>
+          {!isEdit ? (
+            <Field label="Артикул (SKU) *">
+              <Input
+                required
+                className="font-mono"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                placeholder="BOSCH-1457433721"
+              />
+            </Field>
+          ) : null}
           <Field label="OEM-номер">
             <Input
               className="font-mono"
@@ -189,39 +187,50 @@ export function AdminProductForm({ initial, merchants, busy, submitLabel, onSubm
         )}
       </Section>
 
-      <Section title="Цена, НДС, вес">
+      <Section
+        title={isEdit ? 'Вес' : 'Цена, НДС, вес'}
+        desc={
+          isEdit
+            ? 'Цена и НДС задаются на предложениях продавцов (ниже).'
+            : 'Цена/НДС первого предложения продавца.'
+        }
+      >
         <div className="grid gap-4 md:grid-cols-4">
-          <Field label="Цена, сум *">
-            <Input
-              required
-              type="number"
-              min={0}
-              step={1000}
-              className="tabular-nums"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-          </Field>
-          <Field label="Старая цена">
-            <Input
-              type="number"
-              min={0}
-              step={1000}
-              className="tabular-nums"
-              value={compareAtPrice}
-              onChange={(e) => setCompare(e.target.value)}
-            />
-          </Field>
-          <Field label="НДС, %">
-            <Input
-              type="number"
-              min={0}
-              max={30}
-              className="tabular-nums"
-              value={vatRate}
-              onChange={(e) => setVat(e.target.value)}
-            />
-          </Field>
+          {!isEdit ? (
+            <>
+              <Field label="Цена, сум *">
+                <Input
+                  required
+                  type="number"
+                  min={0}
+                  step={1000}
+                  className="tabular-nums"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </Field>
+              <Field label="Старая цена">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1000}
+                  className="tabular-nums"
+                  value={compareAtPrice}
+                  onChange={(e) => setCompare(e.target.value)}
+                />
+              </Field>
+              <Field label="НДС, %">
+                <Input
+                  type="number"
+                  min={0}
+                  max={30}
+                  className="tabular-nums"
+                  value={vatRate}
+                  onChange={(e) => setVat(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
           <Field label="Вес, кг">
             <Input
               type="number"

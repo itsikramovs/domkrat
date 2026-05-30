@@ -26,7 +26,7 @@ export class ReviewsService {
   async create(userId: string, productId: string, dto: CreateReviewDto) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, merchantId: true },
+      select: { id: true },
     });
     if (!product) throw new NotFoundException('Product not found');
 
@@ -45,7 +45,9 @@ export class ReviewsService {
     });
     const isVerified = Boolean(verifiedItem);
     if (!isVerified) {
-      throw new ForbiddenException('Only customers who completed an order with this product can review');
+      throw new ForbiddenException(
+        'Only customers who completed an order with this product can review',
+      );
     }
 
     return this.prisma.productReview.create({
@@ -108,10 +110,13 @@ export class ReviewsService {
   async reply(merchantId: string, reviewId: string, dto: MerchantReplyDto) {
     const review = await this.prisma.productReview.findUnique({
       where: { id: reviewId },
-      include: { product: { select: { merchantId: true } } },
+      include: {
+        product: { select: { offers: { where: { merchantId }, select: { id: true }, take: 1 } } },
+      },
     });
     if (!review) throw new NotFoundException('Review not found');
-    if (review.product.merchantId !== merchantId) {
+    // Любой продавец карточки может ответить на отзыв (мультипродавец).
+    if (review.product.offers.length === 0) {
       throw new ForbiddenException('Not your product');
     }
     return this.prisma.productReview.update({
@@ -131,7 +136,7 @@ export class ReviewsService {
         where,
         include: {
           user: { select: { firstName: true, lastName: true, email: true } },
-          product: { select: { name: true, slug: true, sku: true } },
+          product: { select: { name: true, slug: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
@@ -146,13 +151,16 @@ export class ReviewsService {
 
   listForMerchant(merchantId: string) {
     return this.prisma.productReview.findMany({
-      where: { product: { merchantId } },
+      where: { product: { offers: { some: { merchantId } } } },
       orderBy: { createdAt: 'desc' },
-      include: { product: { select: { name: true, slug: true, sku: true } } },
+      include: { product: { select: { name: true, slug: true } } },
     });
   }
 
-  private async recalcProductRating(tx: Prisma.TransactionClient, productId: string): Promise<void> {
+  private async recalcProductRating(
+    tx: Prisma.TransactionClient,
+    productId: string,
+  ): Promise<void> {
     const stats = await tx.productReview.aggregate({
       where: { productId, status: ReviewStatus.APPROVED },
       _avg: { rating: true },

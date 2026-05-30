@@ -27,11 +27,20 @@ export class InventoryService {
     if (!toCell) throw new NotFoundException('Целевая ячейка не найдена');
     const toWarehouseId = toCell.shelf.rack.zone.warehouseId;
 
+    // Резолвим предложение продавца (явный offerId или дефолтное по товару).
+    const offer = await this.prisma.productOffer.findFirst({
+      where: dto.offerId
+        ? { id: dto.offerId, merchantId, deletedAt: null }
+        : { productId: dto.productId, merchantId, deletedAt: null, variant: { isDefault: true } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, productId: true, variantId: true },
+    });
+    if (!offer) throw new NotFoundException('Предложение для перемещения не найдено');
+
     return this.prisma.$transaction(async (tx) => {
       const dec = await tx.inventoryBalance.updateMany({
         where: {
-          productId: dto.productId,
-          merchantId,
+          offerId: offer.id,
           cellId: dto.fromCellId,
           quantityAvailable: { gte: dto.quantity },
         },
@@ -40,15 +49,11 @@ export class InventoryService {
       if (dec.count === 0) throw new ConflictException('Недостаточно остатка в исходной ячейке');
 
       await tx.inventoryBalance.upsert({
-        where: {
-          productId_merchantId_cellId: {
-            productId: dto.productId,
-            merchantId,
-            cellId: dto.toCellId,
-          },
-        },
+        where: { offerId_cellId: { offerId: offer.id, cellId: dto.toCellId } },
         create: {
-          productId: dto.productId,
+          productId: offer.productId,
+          offerId: offer.id,
+          variantId: offer.variantId,
           merchantId,
           warehouseId: toWarehouseId,
           cellId: dto.toCellId,
@@ -59,7 +64,9 @@ export class InventoryService {
 
       await tx.stockMovement.create({
         data: {
-          productId: dto.productId,
+          productId: offer.productId,
+          offerId: offer.id,
+          variantId: offer.variantId,
           merchantId,
           movementType: 'TRANSFER',
           quantity: dto.quantity,
@@ -90,7 +97,8 @@ export class InventoryService {
       where,
       orderBy: { quantityAvailable: 'asc' },
       include: {
-        product: { select: { sku: true, name: true, slug: true } },
+        product: { select: { name: true, slug: true } },
+        offer: { select: { sku: true } },
         warehouse: { select: { code: true, name: true } },
         cell: { select: { code: true } },
       },
@@ -104,7 +112,8 @@ export class InventoryService {
       orderBy: { performedAt: 'desc' },
       take: Math.min(filter.limit ?? 100, 500),
       include: {
-        product: { select: { sku: true, name: true } },
+        product: { select: { name: true } },
+        offer: { select: { sku: true } },
         fromCell: { select: { code: true } },
         toCell: { select: { code: true } },
       },

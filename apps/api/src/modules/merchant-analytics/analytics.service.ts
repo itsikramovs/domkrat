@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OrderStatus, ProductStatus } from '@prisma/client';
+import { OrderStatus, Prisma, ProductStatus } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
@@ -111,14 +111,15 @@ export class MerchantAnalyticsService {
     }));
 
     // Inventory сводка.
+    const ownedByMerchant: Prisma.ProductWhereInput = { offers: { some: { merchantId } } };
     const [totalProducts, activeProducts, outOfStock] = await Promise.all([
-      this.prisma.product.count({ where: { merchantId, deletedAt: null } }),
+      this.prisma.product.count({ where: { ...ownedByMerchant, deletedAt: null } }),
       this.prisma.product.count({
-        where: { merchantId, deletedAt: null, status: ProductStatus.ACTIVE },
+        where: { ...ownedByMerchant, deletedAt: null, status: ProductStatus.ACTIVE },
       }),
       this.prisma.product.count({
         where: {
-          merchantId,
+          ...ownedByMerchant,
           deletedAt: null,
           status: ProductStatus.ACTIVE,
           inventoryBalances: { every: { quantityAvailable: 0 } },

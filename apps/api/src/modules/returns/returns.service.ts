@@ -31,6 +31,8 @@ const RETURN_INCLUDE = {
         select: {
           id: true,
           productId: true,
+          offerId: true,
+          variantId: true,
           subOrderId: true,
           merchantId: true,
           unitPrice: true,
@@ -96,7 +98,9 @@ export class ReturnsService {
         where: { id: { in: dto.items.map((i) => i.orderItemId) } },
         select: { id: true, unitPrice: true },
       });
-      const priceMap = new Map(detailedItems.map((d) => [d.id, new Decimal(d.unitPrice.toString())]));
+      const priceMap = new Map(
+        detailedItems.map((d) => [d.id, new Decimal(d.unitPrice.toString())]),
+      );
       let refundAmount = new Decimal(0);
       for (const it of dto.items) {
         const unit = priceMap.get(it.orderItemId)!;
@@ -253,23 +257,26 @@ export class ReturnsService {
         const commission = refundForItem.times(commissionRate).dividedBy(100);
         const payout = refundForItem.minus(commission);
 
-        const acc = byMerchant.get(merchantId) ?? { payout: new Decimal(0), commissionBack: new Decimal(0) };
+        const acc = byMerchant.get(merchantId) ?? {
+          payout: new Decimal(0),
+          commissionBack: new Decimal(0),
+        };
         acc.payout = acc.payout.plus(payout);
         acc.commissionBack = acc.commissionBack.plus(commission);
         byMerchant.set(merchantId, acc);
 
         if (restocked) {
           await tx.inventoryBalance.updateMany({
-            where: {
-              productId: ri.orderItem.productId,
-              merchantId,
-              cellId: null,
-            },
+            where: ri.orderItem.offerId
+              ? { offerId: ri.orderItem.offerId, cellId: null }
+              : { productId: ri.orderItem.productId, merchantId, cellId: null },
             data: { quantityAvailable: { increment: ri.quantity } },
           });
           await tx.stockMovement.create({
             data: {
               productId: ri.orderItem.productId,
+              offerId: ri.orderItem.offerId,
+              variantId: ri.orderItem.variantId,
               merchantId,
               movementType: 'RETURN',
               quantity: ri.quantity,

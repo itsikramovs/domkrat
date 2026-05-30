@@ -31,7 +31,7 @@ export interface AdminMerchant {
     totalEarned: string;
     totalWithdrawn: string;
   } | null;
-  _count: { products: number; documents: number };
+  _count: { productOffers: number; documents: number };
 }
 
 export interface AdminOrder {

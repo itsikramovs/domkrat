@@ -168,6 +168,12 @@ enum ProductStatus {
   REJECTED
 }
 
+enum ProductOfferStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
 enum ReviewStatus {
   PENDING
   APPROVED
@@ -696,7 +702,8 @@ model Merchant {
   documents         MerchantDocument[]
   staff             MerchantStaff[]
   contracts         MerchantContract[]
-  products          Product[]
+  createdProducts   Product[]              @relation("ProductCreator")
+  productOffers     ProductOffer[]
   warehouses        Warehouse[]
   inventoryBalances InventoryBalance[]
   stockMovements    StockMovement[]
@@ -838,10 +845,8 @@ model Brand {
 
 model Product {
   id                     String        @id @default(uuid())
-  merchantId             String        @map("merchant_id")
   categoryId             String        @map("category_id")
   brandId                String?       @map("brand_id")
-  sku                    String
   name                   Json          @db.JsonB
   slug                   String
   description            Json?         @db.JsonB
@@ -854,11 +859,6 @@ model Product {
   width                  Decimal?      @db.Decimal(10, 2)
   height                 Decimal?      @db.Decimal(10, 2)
   volume                 Decimal?      @db.Decimal(10, 3)
-  price                  Decimal       @db.Decimal(15, 2)
-  compareAtPrice         Decimal?      @map("compare_at_price") @db.Decimal(15, 2)
-  costPrice              Decimal?      @map("cost_price") @db.Decimal(15, 2)
-  currency               String        @default("UZS")
-  vatRate                Decimal       @default(12) @map("vat_rate") @db.Decimal(5, 2)
   status                 ProductStatus @default(DRAFT)
   isFeatured             Boolean       @default(false) @map("is_featured")
   isNew                  Boolean       @default(false) @map("is_new")
@@ -874,8 +874,12 @@ model Product {
   createdAt              DateTime      @default(now()) @map("created_at")
   updatedAt              DateTime      @updatedAt @map("updated_at")
   deletedAt              DateTime?     @map("deleted_at")
+  createdByMerchantId    String?       @map("created_by_merchant_id")
+  minPrice               Decimal?      @map("min_price") @db.Decimal(15, 2)
 
-  merchant          Merchant               @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  createdByMerchant Merchant?              @relation("ProductCreator", fields: [createdByMerchantId], references: [id], onDelete: SetNull)
+  variants          ProductVariant[]
+  offers            ProductOffer[]
   category          Category               @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   brand             Brand?                 @relation(fields: [brandId], references: [id], onDelete: SetNull)
   images            ProductImage[]
@@ -891,17 +895,77 @@ model Product {
   stockReceiptItems StockReceiptItem[]
   inventoryAlerts   InventoryAlert[]
 
-  @@unique([merchantId, sku])
-  @@index([merchantId])
   @@index([categoryId])
   @@index([brandId])
   @@index([status])
   @@index([oemNumber])
   @@index([slug])
-  @@index([price])
   @@index([rating])
   @@index([publishedAt])
+  @@index([createdByMerchantId])
+  @@index([minPrice])
   @@map("products")
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  name      Json?    @db.JsonB
+  barcode   String?
+  position  Int      @default(0)
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  offers            ProductOffer[]
+  inventoryBalances InventoryBalance[]
+  stockMovements    StockMovement[]
+  stockReservations StockReservation[]
+  stockReceiptItems StockReceiptItem[]
+  inventoryAlerts   InventoryAlert[]
+  orderItems        OrderItem[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductOffer {
+  id             String             @id @default(uuid())
+  variantId      String             @map("variant_id")
+  productId      String             @map("product_id")
+  merchantId     String             @map("merchant_id")
+  sku            String
+  price          Decimal            @db.Decimal(15, 2)
+  compareAtPrice Decimal?           @map("compare_at_price") @db.Decimal(15, 2)
+  costPrice      Decimal?           @map("cost_price") @db.Decimal(15, 2)
+  vatRate        Decimal            @default(12) @map("vat_rate") @db.Decimal(5, 2)
+  currency       String             @default("UZS")
+  status         ProductOfferStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
+
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  product  Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  merchant Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+  inventoryBalances InventoryBalance[]
+  stockMovements    StockMovement[]
+  stockReservations StockReservation[]
+  stockReceiptItems StockReceiptItem[]
+  inventoryAlerts   InventoryAlert[]
+
+  @@unique([merchantId, sku])
+  @@unique([variantId, merchantId])
+  @@index([productId])
+  @@index([variantId])
+  @@index([merchantId])
+  @@index([status])
+  @@index([price])
+  @@map("product_offers")
 }
 
 model ProductImage {
@@ -1266,6 +1330,8 @@ model WarehouseCell {
 model InventoryBalance {
   id                String    @id @default(uuid())
   productId         String    @map("product_id")
+  offerId           String    @map("offer_id")
+  variantId         String?   @map("variant_id")
   merchantId        String    @map("merchant_id")
   warehouseId       String?   @map("warehouse_id")
   cellId            String?   @map("cell_id")
@@ -1276,13 +1342,17 @@ model InventoryBalance {
   lastSoldAt        DateTime? @map("last_sold_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  merchant  Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  warehouse Warehouse?     @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  cell      WarehouseCell? @relation(fields: [cellId], references: [id], onDelete: SetNull)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  offer     ProductOffer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  merchant  Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  cell      WarehouseCell?  @relation(fields: [cellId], references: [id], onDelete: SetNull)
 
-  @@unique([productId, merchantId, cellId])
+  @@unique([offerId, cellId])
   @@index([productId])
+  @@index([offerId])
+  @@index([variantId])
   @@index([merchantId])
   @@index([warehouseId])
   @@index([cellId])
@@ -1293,6 +1363,8 @@ model InventoryBalance {
 model StockMovement {
   id            BigInt            @id @default(autoincrement())
   productId     String            @map("product_id")
+  offerId       String?           @map("offer_id")
+  variantId     String?           @map("variant_id")
   merchantId    String            @map("merchant_id")
   movementType  StockMovementType @map("movement_type")
   quantity      Int
@@ -1305,13 +1377,16 @@ model StockMovement {
   performedById String            @map("performed_by")
   performedAt   DateTime          @default(now()) @map("performed_at")
 
-  product     Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  merchant    Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-  fromCell    WarehouseCell? @relation("MovementFrom", fields: [fromCellId], references: [id], onDelete: SetNull)
-  toCell      WarehouseCell? @relation("MovementTo", fields: [toCellId], references: [id], onDelete: SetNull)
-  performedBy User           @relation(fields: [performedById], references: [id], onDelete: Restrict)
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offer       ProductOffer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  merchant    Merchant        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  fromCell    WarehouseCell?  @relation("MovementFrom", fields: [fromCellId], references: [id], onDelete: SetNull)
+  toCell      WarehouseCell?  @relation("MovementTo", fields: [toCellId], references: [id], onDelete: SetNull)
+  performedBy User            @relation(fields: [performedById], references: [id], onDelete: Restrict)
 
   @@index([productId])
+  @@index([offerId])
   @@index([merchantId])
   @@index([movementType])
   @@index([referenceType, referenceId])
@@ -1323,6 +1398,8 @@ model StockReservation {
   id             String    @id @default(uuid())
   orderItemId    String    @unique @map("order_item_id")
   productId      String    @map("product_id")
+  offerId        String?   @map("offer_id")
+  variantId      String?   @map("variant_id")
   merchantId     String    @map("merchant_id")
   cellId         String?   @map("cell_id")
   quantity       Int
@@ -1331,12 +1408,15 @@ model StockReservation {
   releasedAt     DateTime? @map("released_at")
   releasedReason String?   @map("released_reason")
 
-  orderItem OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
-  product   Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
-  merchant  Merchant       @relation(fields: [merchantId], references: [id], onDelete: Restrict)
-  cell      WarehouseCell? @relation(fields: [cellId], references: [id], onDelete: SetNull)
+  orderItem OrderItem       @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offer     ProductOffer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  merchant  Merchant        @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  cell      WarehouseCell?  @relation(fields: [cellId], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([offerId])
   @@index([expiresAt])
   @@map("stock_reservations")
 }
@@ -1375,6 +1455,8 @@ model StockReceiptItem {
   id               String   @id @default(uuid())
   receiptId        String   @map("receipt_id")
   productId        String   @map("product_id")
+  offerId          String?  @map("offer_id")
+  variantId        String?  @map("variant_id")
   expectedQuantity Int      @map("expected_quantity")
   receivedQuantity Int      @default(0) @map("received_quantity")
   acceptedQuantity Int      @default(0) @map("accepted_quantity")
@@ -1384,17 +1466,22 @@ model StockReceiptItem {
   placedInCells    Json?    @map("placed_in_cells") @db.JsonB
   createdAt        DateTime @default(now()) @map("created_at")
 
-  receipt StockReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  product Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  receipt StockReceipt    @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offer   ProductOffer?   @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([receiptId])
   @@index([productId])
+  @@index([offerId])
   @@map("stock_receipt_items")
 }
 
 model InventoryAlert {
   id           String        @id @default(uuid())
   productId    String        @map("product_id")
+  offerId      String?       @map("offer_id")
+  variantId    String?       @map("variant_id")
   merchantId   String        @map("merchant_id")
   alertType    AlertType     @map("alert_type")
   severity     AlertSeverity
@@ -1405,11 +1492,14 @@ model InventoryAlert {
   resolvedById String?       @map("resolved_by")
   createdAt    DateTime      @default(now()) @map("created_at")
 
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  resolvedBy User?    @relation("AlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  offer      ProductOffer?   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  merchant   Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  resolvedBy User?           @relation("AlertResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([productId])
+  @@index([offerId])
   @@index([merchantId])
   @@index([alertType])
   @@index([status])
@@ -1445,15 +1535,18 @@ model CartItem {
   id           String   @id @default(uuid())
   cartId       String   @map("cart_id")
   productId    String   @map("product_id")
+  offerId      String   @map("offer_id")
   quantity     Int
   priceAtAdded Decimal  @map("price_at_added") @db.Decimal(15, 2)
   createdAt    DateTime @default(now()) @map("created_at")
 
-  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  cart    Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offer   ProductOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
 
-  @@unique([cartId, productId])
+  @@unique([cartId, offerId])
   @@index([cartId])
+  @@index([offerId])
   @@map("cart_items")
 }
 
@@ -1552,6 +1645,8 @@ model OrderItem {
   orderId          String          @map("order_id")
   subOrderId       String          @map("sub_order_id")
   productId        String          @map("product_id")
+  offerId          String?         @map("offer_id")
+  variantId        String?         @map("variant_id")
   merchantId       String          @map("merchant_id")
   productSnapshot  Json            @map("product_snapshot") @db.JsonB
   quantity         Int
@@ -1570,6 +1665,8 @@ model OrderItem {
   order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   subOrder         OrderSubOrder     @relation(fields: [subOrderId], references: [id], onDelete: Cascade)
   product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  offer            ProductOffer?     @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  variant          ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
   merchant         Merchant          @relation(fields: [merchantId], references: [id], onDelete: Restrict)
   pickedFromCell   WarehouseCell?    @relation(fields: [pickedFromCellId], references: [id], onDelete: SetNull)
   pickedBy         User?             @relation(fields: [pickedById], references: [id], onDelete: SetNull)
@@ -1579,6 +1676,7 @@ model OrderItem {
   @@index([orderId])
   @@index([subOrderId])
   @@index([productId])
+  @@index([offerId])
   @@index([merchantId])
   @@index([status])
   @@map("order_items")

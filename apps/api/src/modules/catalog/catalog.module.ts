@@ -13,6 +13,8 @@ import { SearchController } from './controllers/search.controller';
 import { AttributesService } from './services/attributes.service';
 import { BrandsService } from './services/brands.service';
 import { CategoriesService } from './services/categories.service';
+import { ProductOffersService } from './services/product-offers.service';
+import { ProductVariantsService } from './services/product-variants.service';
 import { ProductsService } from './services/products.service';
 
 @Module({
@@ -27,7 +29,21 @@ import { ProductsService } from './services/products.service';
     AdminProductsController,
     AdminAttributesController,
   ],
-  providers: [CategoriesService, BrandsService, ProductsService, AttributesService],
-  exports: [CategoriesService, BrandsService, ProductsService, AttributesService],
+  providers: [
+    CategoriesService,
+    BrandsService,
+    ProductsService,
+    ProductVariantsService,
+    ProductOffersService,
+    AttributesService,
+  ],
+  exports: [
+    CategoriesService,
+    BrandsService,
+    ProductsService,
+    ProductVariantsService,
+    ProductOffersService,
+    AttributesService,
+  ],
 })
 export class CatalogModule {}

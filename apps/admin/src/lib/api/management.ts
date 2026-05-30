@@ -502,12 +502,15 @@ export async function uploadBannerImage(file: File): Promise<string> {
 // ============================ Модерация товаров ============================
 export interface AdminProduct {
   id: string;
-  sku: string;
+  sku: string | null;
   slug: string;
   name: ML;
   price: string;
+  minPrice: string | null;
   status: string;
-  merchant?: { brandName: string };
+  offersCount: number;
+  sellerCount: number;
+  merchant?: { brandName: string } | null;
 }
 
 export function useModerationProducts(status?: string, search?: string) {

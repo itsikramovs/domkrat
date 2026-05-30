@@ -56,15 +56,39 @@ export interface AdminProductAttr {
   };
 }
 
+export interface AdminVariant {
+  id: string;
+  name: ML | null;
+  barcode: string | null;
+  position: number;
+  isDefault: boolean;
+}
+
+export interface AdminOffer {
+  id: string;
+  variantId: string;
+  merchantId: string;
+  sku: string;
+  price: string;
+  compareAtPrice: string | null;
+  vatRate: string;
+  status: string;
+  stock: number;
+  reserved: number;
+  merchant: { id: string; brandName: string };
+  variant: { id: string; name: ML | null; isDefault: boolean };
+}
+
 export interface AdminProductDetail {
   id: string;
-  sku: string;
+  sku: string | null;
   slug: string;
   name: ML;
   description: ML | null;
   price: string;
   compareAtPrice: string | null;
   vatRate: string;
+  minPrice: string | null;
   status: string;
   oemNumber: string | null;
   barcode: string | null;
@@ -73,10 +97,13 @@ export interface AdminProductDetail {
   brandId: string | null;
   category: { id: string; name: ML; slug: string };
   brand: { id: string; name: string } | null;
-  merchant: { id: string; brandName: string };
+  merchant: { id: string; brandName: string } | null;
+  offersCount: number;
+  sellerCount: number;
   images: Array<{ id: string; url: string; isPrimary: boolean }>;
   attributes: AdminProductAttr[];
-  inventoryBalances: Array<{ quantityAvailable: number }>;
+  variants: AdminVariant[];
+  offers: AdminOffer[];
 }
 
 export interface CreateProductBody {
@@ -129,6 +156,7 @@ export function useReceiveProduct(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: {
+      offerId?: string;
       warehouseId: string;
       cellId: string;
       quantity: number;
@@ -136,6 +164,122 @@ export function useReceiveProduct(id: string) {
     }) => apiFetch(`/admin/products/${id}/receive`, { method: 'POST', body }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['admin-product', id] });
+      void qc.invalidateQueries({ queryKey: ['admin-mod-products'] });
+    },
+  });
+}
+
+// -------- Variants --------
+export function useProductVariants(id: string) {
+  const t = useTok();
+  return useQuery<AdminVariant[]>({
+    queryKey: ['admin-product-variants', id, t],
+    queryFn: () => apiFetch(`/admin/products/${id}/variants`),
+    enabled: Boolean(t && id),
+  });
+}
+
+export interface VariantBody {
+  name?: { ru?: string; uz?: string } | null;
+  barcode?: string;
+  position?: number;
+  isDefault?: boolean;
+}
+
+export function useCreateVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: VariantBody) =>
+      apiFetch(`/admin/products/${productId}/variants`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', productId] }),
+  });
+}
+
+export function useUpdateVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ variantId, body }: { variantId: string; body: VariantBody }) =>
+      apiFetch(`/admin/products/${productId}/variants/${variantId}`, { method: 'PATCH', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', productId] }),
+  });
+}
+
+export function useSetDefaultVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (variantId: string) =>
+      apiFetch(`/admin/products/${productId}/variants/${variantId}/default`, {
+        method: 'PATCH',
+        body: {},
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', productId] }),
+  });
+}
+
+export function useDeleteVariant(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (variantId: string) =>
+      apiFetch(`/admin/products/${productId}/variants/${variantId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', productId] }),
+  });
+}
+
+// -------- Offers (multi-seller) --------
+export interface OfferBody {
+  variantId: string;
+  merchantId: string;
+  sku: string;
+  price: number;
+  compareAtPrice?: number;
+  vatRate?: number;
+}
+
+export function useCreateOffer(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: OfferBody) =>
+      apiFetch(`/admin/products/${productId}/offers`, { method: 'POST', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-product', productId] });
+      void qc.invalidateQueries({ queryKey: ['admin-mod-products'] });
+    },
+  });
+}
+
+export function useUpdateOffer(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      offerId,
+      body,
+    }: {
+      offerId: string;
+      body: Partial<Pick<OfferBody, 'sku' | 'price' | 'compareAtPrice' | 'vatRate'>>;
+    }) => apiFetch(`/admin/products/offers/${offerId}`, { method: 'PATCH', body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-product', productId] });
+      void qc.invalidateQueries({ queryKey: ['admin-mod-products'] });
+    },
+  });
+}
+
+export function useSetOfferStatus(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, status }: { offerId: string; status: string }) =>
+      apiFetch(`/admin/products/offers/${offerId}/status`, { method: 'PATCH', body: { status } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-product', productId] }),
+  });
+}
+
+export function useDeleteOffer(productId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (offerId: string) =>
+      apiFetch(`/admin/products/offers/${offerId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['admin-product', productId] });
       void qc.invalidateQueries({ queryKey: ['admin-mod-products'] });
     },
   });
@@ -231,9 +375,9 @@ export function useSetPrimaryImage(id: string) {
   });
 }
 
-// -------- Multi-line приёмка --------
+// -------- Multi-line приёмка (по предложениям) --------
 export interface BatchReceiveItem {
-  productId: string;
+  offerId: string;
   cellId: string;
   quantity: number;
   unitCost?: number;
@@ -242,7 +386,7 @@ export interface BatchReceiveItem {
 export function useReceiveBatch() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { merchantId: string; warehouseId: string; items: BatchReceiveItem[] }) =>
+    mutationFn: (body: { warehouseId: string; items: BatchReceiveItem[] }) =>
       apiFetch('/admin/products/receive-batch', { method: 'POST', body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-mod-products'] }),
   });
@@ -250,10 +394,11 @@ export function useReceiveBatch() {
 
 export interface AdminProductListItem {
   id: string;
-  sku: string;
+  sku: string | null;
   name: ML;
   status: string;
   price: string;
+  offers: Array<{ id: string; merchantId: string; sku: string; price: string }>;
 }
 
 export function useAdminProductList(filter: {
