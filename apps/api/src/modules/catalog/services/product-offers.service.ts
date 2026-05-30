@@ -250,6 +250,30 @@ export class ProductOffersService {
     return offer;
   }
 
+  /**
+   * Доклеивает `totalStock` (продаваемый агрегат cellId=null по всем активным предложениям
+   * карточки) к спроецированным элементам списка. Один групповой запрос, без N+1.
+   */
+  async attachTotalStock<T extends { offers?: Array<{ id: string }>; totalStock?: number }>(
+    items: T[],
+  ): Promise<T[]> {
+    const offerIds = items.flatMap((i) => (i.offers ?? []).map((o) => o.id));
+    if (offerIds.length === 0) {
+      for (const i of items) i.totalStock = 0;
+      return items;
+    }
+    const rows = await this.prisma.inventoryBalance.groupBy({
+      by: ['offerId'],
+      where: { offerId: { in: offerIds }, cellId: null },
+      _sum: { quantityAvailable: true },
+    });
+    const map = new Map(rows.map((r) => [r.offerId, r._sum.quantityAvailable ?? 0]));
+    for (const i of items) {
+      i.totalStock = (i.offers ?? []).reduce((s, o) => s + (map.get(o.id) ?? 0), 0);
+    }
+    return items;
+  }
+
   /** Уникальные productId для набора предложений (для активации карточек после приёмки). */
   async productIdsForOffers(offerIds: string[]): Promise<string[]> {
     const rows = await this.prisma.productOffer.findMany({

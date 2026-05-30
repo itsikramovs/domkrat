@@ -510,19 +510,33 @@ export interface AdminProduct {
   status: string;
   offersCount: number;
   sellerCount: number;
+  totalStock?: number;
+  category?: { id: string; name: ML; slug: string } | null;
+  images?: Array<{ url: string; thumbnailUrl: string | null }>;
   merchant?: { brandName: string } | null;
 }
 
-export function useModerationProducts(status?: string, search?: string) {
+export interface ProductsFilter {
+  status?: string;
+  search?: string;
+  categoryId?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export function useModerationProducts(filter: ProductsFilter = {}) {
   const t = useTok();
   const qs = new URLSearchParams();
-  if (status) qs.set('status', status);
-  if (search) qs.set('search', search);
-  qs.set('perPage', '50');
+  if (filter.status) qs.set('status', filter.status);
+  if (filter.search) qs.set('search', filter.search);
+  if (filter.categoryId) qs.set('categoryId', filter.categoryId);
+  qs.set('page', String(filter.page ?? 1));
+  qs.set('perPage', String(filter.perPage ?? 24));
   return useQuery({
-    queryKey: ['admin-mod-products', status, search, t],
+    queryKey: ['admin-mod-products', filter, t],
     queryFn: () => apiFetch<Paginated<AdminProduct>>(`/admin/products?${qs.toString()}`),
     enabled: Boolean(t),
+    placeholderData: (prev) => prev,
   });
 }
 

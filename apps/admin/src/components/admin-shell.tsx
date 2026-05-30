@@ -48,7 +48,7 @@ const GROUPS: Group[] = [
   {
     title: 'Каталог',
     items: [
-      { href: '/catalog/products', label: 'Модерация товаров', icon: PackageSearch },
+      { href: '/catalog/products', label: 'Товары', icon: PackageSearch },
       { href: '/catalog/categories', label: 'Категории', icon: Tags },
       { href: '/catalog/brands', label: 'Бренды', icon: Award },
       { href: '/attributes', label: 'Характеристики', icon: ListChecks },

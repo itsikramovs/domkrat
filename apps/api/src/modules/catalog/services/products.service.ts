@@ -131,8 +131,11 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
+    const data = items.map((p) => this.project(p));
+    // Для админ-панели управления — доклеиваем продаваемый остаток по карточке (1 запрос).
+    if (opts?.adminMode) await this.offers.attachTotalStock(data);
     return {
-      data: items.map((p) => this.project(p)),
+      data,
       meta: { page, perPage, total, totalPages: Math.ceil(total / perPage) },
     };
   }
