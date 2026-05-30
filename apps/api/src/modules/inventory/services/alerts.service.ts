@@ -11,7 +11,9 @@ const DAY_MS = 86_400_000;
  * Мониторинг хранения (шаг 7 §3.1): ежедневный скан остатков → InventoryAlert.
  * - LOW_STOCK / OUT_OF_STOCK по агрегату (cellId null)
  * - STALE_STOCK_30D/60D/90D по oldestReceivedAt в ячейках
- * Дедуп: один ACTIVE-алерт на (product, merchant, type). Пополнение авто-resolve'ит low/out.
+ * Гранулярность — по предложению (offer = продавец × вариант): в маркетплейс-модели
+ * у одной карточки/продавца может быть несколько вариантов с разным остатком.
+ * Дедуп: один ACTIVE-алерт на (offer, type). Пополнение авто-resolve'ит low/out.
  */
 @Injectable()
 export class AlertsService {
@@ -29,92 +31,70 @@ export class AlertsService {
   async scan(): Promise<{ created: number }> {
     let created = 0;
 
-    // 1. Доступность к продаже (агрегат cellId = null)
+    // 1. Доступность к продаже (агрегат cellId = null) — по предложению (offer)
     const aggregates = await this.prisma.inventoryBalance.findMany({
       where: { cellId: null },
-      select: { productId: true, merchantId: true, quantityAvailable: true },
+      select: {
+        offerId: true,
+        productId: true,
+        variantId: true,
+        merchantId: true,
+        quantityAvailable: true,
+      },
     });
     for (const b of aggregates) {
       if (b.quantityAvailable <= 0) {
-        await this.autoResolve(b.productId, b.merchantId, [AlertType.LOW_STOCK]);
-        created += await this.ensure(
-          b.productId,
-          b.merchantId,
-          AlertType.OUT_OF_STOCK,
-          AlertSeverity.CRITICAL,
-          {
-            ru: 'Нет в наличии',
-            uz: 'Mavjud emas',
-          },
-        );
+        await this.autoResolve(b.offerId, [AlertType.LOW_STOCK]);
+        created += await this.ensure(b, AlertType.OUT_OF_STOCK, AlertSeverity.CRITICAL, {
+          ru: 'Нет в наличии',
+          uz: 'Mavjud emas',
+        });
       } else if (b.quantityAvailable <= LOW_STOCK_THRESHOLD) {
-        await this.autoResolve(b.productId, b.merchantId, [AlertType.OUT_OF_STOCK]);
-        created += await this.ensure(
-          b.productId,
-          b.merchantId,
-          AlertType.LOW_STOCK,
-          AlertSeverity.WARNING,
-          {
-            ru: `Заканчивается: ${b.quantityAvailable} шт`,
-            uz: `Tugayapti: ${b.quantityAvailable} dona`,
-          },
-        );
+        await this.autoResolve(b.offerId, [AlertType.OUT_OF_STOCK]);
+        created += await this.ensure(b, AlertType.LOW_STOCK, AlertSeverity.WARNING, {
+          ru: `Заканчивается: ${b.quantityAvailable} шт`,
+          uz: `Tugayapti: ${b.quantityAvailable} dona`,
+        });
       } else {
-        await this.autoResolve(b.productId, b.merchantId, [
-          AlertType.LOW_STOCK,
-          AlertType.OUT_OF_STOCK,
-        ]);
+        await this.autoResolve(b.offerId, [AlertType.LOW_STOCK, AlertType.OUT_OF_STOCK]);
       }
     }
 
-    // 2. Залежавшийся товар (по ячейкам, oldestReceivedAt)
+    // 2. Залежавшийся товар (по ячейкам, oldestReceivedAt) — по предложению
     const cellBalances = await this.prisma.inventoryBalance.findMany({
       where: {
         cellId: { not: null },
         quantityAvailable: { gt: 0 },
         oldestReceivedAt: { not: null },
       },
-      select: { productId: true, merchantId: true, oldestReceivedAt: true },
+      select: {
+        offerId: true,
+        productId: true,
+        variantId: true,
+        merchantId: true,
+        oldestReceivedAt: true,
+      },
     });
     const seen = new Set<string>();
     for (const b of cellBalances) {
-      const key = `${b.productId}:${b.merchantId}`;
-      if (seen.has(key)) continue; // один алерт на товар
-      seen.add(key);
+      if (seen.has(b.offerId)) continue; // один алерт на предложение
+      seen.add(b.offerId);
       const days = (Date.now() - b.oldestReceivedAt!.getTime()) / DAY_MS;
       if (days >= 90) {
-        created += await this.ensure(
-          b.productId,
-          b.merchantId,
-          AlertType.STALE_STOCK_90D,
-          AlertSeverity.CRITICAL,
-          {
-            ru: 'Лежит на складе > 90 дней',
-            uz: 'Omborda 90 kundan ortiq',
-          },
-        );
+        created += await this.ensure(b, AlertType.STALE_STOCK_90D, AlertSeverity.CRITICAL, {
+          ru: 'Лежит на складе > 90 дней',
+          uz: 'Omborda 90 kundan ortiq',
+        });
       } else if (days >= 60) {
-        created += await this.ensure(
-          b.productId,
-          b.merchantId,
-          AlertType.STALE_STOCK_60D,
-          AlertSeverity.WARNING,
-          {
-            ru: 'Лежит на складе > 60 дней',
-            uz: 'Omborda 60 kundan ortiq',
-          },
-        );
+        created += await this.ensure(b, AlertType.STALE_STOCK_60D, AlertSeverity.WARNING, {
+          ru: 'Лежит на складе > 60 дней',
+          uz: 'Omborda 60 kundan ortiq',
+        });
       } else if (days >= 30) {
-        created += await this.ensure(
-          b.productId,
-          b.merchantId,
-          AlertType.STALE_STOCK_30D,
-          AlertSeverity.WARNING,
-          {
-            ru: 'Лежит на складе > 30 дней',
-            uz: 'Omborda 30 kundan ortiq',
-          },
-        );
+        created += await this.ensure(b, AlertType.STALE_STOCK_30D, AlertSeverity.WARNING, {
+          ru: 'Лежит на складе > 30 дней',
+          uz: 'Omborda 30 kundan ortiq',
+        });
       }
     }
 
@@ -154,21 +134,22 @@ export class AlertsService {
   }
 
   private async ensure(
-    productId: string,
-    merchantId: string,
+    ref: { offerId: string; productId: string; variantId: string | null; merchantId: string },
     alertType: AlertType,
     severity: AlertSeverity,
     message: { ru: string; uz: string },
   ): Promise<number> {
     const existing = await this.prisma.inventoryAlert.findFirst({
-      where: { productId, merchantId, alertType, status: AlertStatus.ACTIVE },
+      where: { offerId: ref.offerId, alertType, status: AlertStatus.ACTIVE },
       select: { id: true },
     });
     if (existing) return 0;
     await this.prisma.inventoryAlert.create({
       data: {
-        productId,
-        merchantId,
+        offerId: ref.offerId,
+        productId: ref.productId,
+        variantId: ref.variantId,
+        merchantId: ref.merchantId,
         alertType,
         severity,
         message: message as unknown as Prisma.InputJsonValue,
@@ -178,13 +159,9 @@ export class AlertsService {
     return 1;
   }
 
-  private async autoResolve(
-    productId: string,
-    merchantId: string,
-    types: AlertType[],
-  ): Promise<void> {
+  private async autoResolve(offerId: string, types: AlertType[]): Promise<void> {
     await this.prisma.inventoryAlert.updateMany({
-      where: { productId, merchantId, alertType: { in: types }, status: AlertStatus.ACTIVE },
+      where: { offerId, alertType: { in: types }, status: AlertStatus.ACTIVE },
       data: { status: AlertStatus.RESOLVED, resolvedAt: new Date() },
     });
   }
