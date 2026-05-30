@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, ProductOfferStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
@@ -114,6 +119,55 @@ export class ProductOffersService {
       stock: stockMap.get(o.id)?.quantityAvailable ?? 0,
       reserved: stockMap.get(o.id)?.quantityReserved ?? 0,
     }));
+  }
+
+  /** Предложения мерчанта (для кабинета): карточка + вариант + остаток. */
+  async listForMerchant(merchantId: string) {
+    const offers = await this.prisma.productOffer.findMany({
+      where: { merchantId, deletedAt: null },
+      orderBy: [{ createdAt: 'desc' }],
+      include: {
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            status: true,
+            images: {
+              where: { isPrimary: true },
+              take: 1,
+              select: { url: true, thumbnailUrl: true },
+            },
+          },
+        },
+        variant: { select: { id: true, name: true, isDefault: true } },
+      },
+    });
+    if (offers.length === 0) return [];
+    const stock = await this.prisma.inventoryBalance.groupBy({
+      by: ['offerId'],
+      where: { offerId: { in: offers.map((o) => o.id) }, cellId: null },
+      _sum: { quantityAvailable: true, quantityReserved: true },
+    });
+    const map = new Map(stock.map((s) => [s.offerId, s._sum]));
+    return offers.map((o) => ({
+      ...o,
+      stock: map.get(o.id)?.quantityAvailable ?? 0,
+      reserved: map.get(o.id)?.quantityReserved ?? 0,
+    }));
+  }
+
+  /** Проверяет, что предложение принадлежит мерчанту (для merchant-эндпоинтов). */
+  async assertOwner(
+    offerId: string,
+    merchantId: string,
+  ): Promise<{ id: string; productId: string }> {
+    const offer = await this.prisma.productOffer.findFirst({
+      where: { id: offerId, merchantId, deletedAt: null },
+      select: { id: true, productId: true },
+    });
+    if (!offer) throw new ForbiddenException('Это не ваше предложение');
+    return offer;
   }
 
   /** Добавить предложение продавца на существующий вариант (мультипродавец). */

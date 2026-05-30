@@ -7,6 +7,7 @@ import { AdminCatalogController } from './controllers/admin-catalog.controller';
 import { AdminProductsController } from './controllers/admin-products.controller';
 import { BrandsController } from './controllers/brands.controller';
 import { CategoriesController } from './controllers/categories.controller';
+import { MerchantOffersController } from './controllers/merchant-offers.controller';
 import { MerchantProductsController } from './controllers/merchant-products.controller';
 import { ProductsController } from './controllers/products.controller';
 import { SearchController } from './controllers/search.controller';
@@ -25,6 +26,7 @@ import { ProductsService } from './services/products.service';
     ProductsController,
     SearchController,
     MerchantProductsController,
+    MerchantOffersController,
     AdminCatalogController,
     AdminProductsController,
     AdminAttributesController,
