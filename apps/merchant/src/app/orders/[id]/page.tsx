@@ -68,7 +68,7 @@ export default function MerchantOrderPage() {
           </div>
           {canReady ? (
             <div className="border-t pt-4">
-              <OrderPickPanel subOrderId={o.id} />
+              <OrderPickPanel subOrderId={o.id} label={o.subOrderNumber} />
             </div>
           ) : null}
         </CardContent>

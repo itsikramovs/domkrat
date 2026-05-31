@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, Check, Plus, Truck, X } from 'lucide-react';
+import { Boxes, Check, Plus, Printer, Truck, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiHttpError } from '@/lib/api-client';
 import { useSubOrderPickList, usePickSubOrder, type AdminPickList } from '@/lib/api/admin';
+import { printPickList } from '@/lib/print';
 
 type Row = { cellId: string | null; qty: number };
 
@@ -23,10 +24,12 @@ export function AdminOrderPickPanel({
   orderId,
   subOrderId,
   status,
+  label,
 }: {
   orderId: string;
   subOrderId: string;
   status: string;
+  label?: string;
 }) {
   const enabled = status === 'PROCESSING';
   const pl = useSubOrderPickList(subOrderId, enabled);
@@ -86,8 +89,17 @@ export function AdminOrderPickPanel({
 
   return (
     <div className="mt-3 space-y-3 rounded-lg border bg-muted/20 p-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Boxes className="h-4 w-4 text-primary" /> Сборка из ячеек (FBO)
+      <div className="flex items-center justify-between text-sm font-medium">
+        <span className="flex items-center gap-2">
+          <Boxes className="h-4 w-4 text-primary" /> Сборка из ячеек (FBO)
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => printPickList(label ?? subOrderId, items)}
+        >
+          <Printer className="mr-1 h-4 w-4" /> Лист отбора
+        </Button>
       </div>
       {items.map((it) => {
         const ok = totalOf(it.orderItemId) === it.quantity;

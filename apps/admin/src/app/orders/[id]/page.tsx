@@ -162,7 +162,12 @@ function Inner() {
                         </div>
                       </div>
                       <div className="w-full">
-                        <AdminOrderPickPanel orderId={id} subOrderId={s.id} status={s.status} />
+                        <AdminOrderPickPanel
+                          orderId={id}
+                          subOrderId={s.id}
+                          status={s.status}
+                          label={s.subOrderNumber}
+                        />
                       </div>
                     </div>
                   ))}

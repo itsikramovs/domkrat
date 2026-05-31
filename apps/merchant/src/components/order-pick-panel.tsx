@@ -1,6 +1,6 @@
 'use client';
 
-import { Boxes, Check, Plus, X, Zap } from 'lucide-react';
+import { Boxes, Check, Plus, Printer, X, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -13,6 +13,7 @@ import {
   useTransitionOrder,
   type PickListItem,
 } from '@/lib/api/merchant-orders';
+import { printPickList } from '@/lib/print';
 import { pickLocale } from '@/lib/utils';
 
 type Row = { cellId: string | null; qty: number };
@@ -25,7 +26,7 @@ function initRows(item: PickListItem): Row[] {
 }
 
 /** Лист отбора суб-заказа: ячейки + количества, подтверждение сборки или авто-FIFO. */
-export function OrderPickPanel({ subOrderId }: { subOrderId: string }) {
+export function OrderPickPanel({ subOrderId, label }: { subOrderId: string; label?: string }) {
   const pl = usePickList(subOrderId);
   const pick = usePickSubOrder();
   const ready = useTransitionOrder();
@@ -83,9 +84,18 @@ export function OrderPickPanel({ subOrderId }: { subOrderId: string }) {
         <div className="flex items-center gap-2 font-semibold">
           <Boxes className="h-4 w-4 text-primary" /> Сборка из ячеек
         </div>
-        <Button size="sm" variant="outline" onClick={quickAssemble} disabled={ready.isPending}>
-          <Zap className="mr-1 h-4 w-4" /> Быстрая сборка (FIFO)
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => printPickList(label ?? subOrderId, items)}
+          >
+            <Printer className="mr-1 h-4 w-4" /> Лист отбора
+          </Button>
+          <Button size="sm" variant="outline" onClick={quickAssemble} disabled={ready.isPending}>
+            <Zap className="mr-1 h-4 w-4" /> Быстрая сборка (FIFO)
+          </Button>
+        </div>
       </div>
 
       {items.map((it) => {
