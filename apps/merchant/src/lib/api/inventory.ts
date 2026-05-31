@@ -268,3 +268,74 @@ export function useTransfer() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['inv'] }),
   });
 }
+
+// --- Инвентаризация ---
+export interface MStockCountItem {
+  id: string;
+  cellCode: string;
+  sku: string;
+  productName: MultiLangText | null;
+  expectedQty: number;
+  countedQty: number | null;
+}
+export interface MStockCount {
+  id: string;
+  warehouseId: string;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  note: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  items?: MStockCountItem[];
+  _count?: { items: number };
+}
+
+export function useStockCounts() {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['m-counts', t],
+    queryFn: () => apiFetch<MStockCount[]>('/merchant/inventory/counts'),
+    enabled: Boolean(t),
+  });
+}
+export function useStockCount(id: string | null) {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['m-count', id, t],
+    queryFn: () => apiFetch<MStockCount>(`/merchant/inventory/counts/${id}`),
+    enabled: Boolean(t) && Boolean(id),
+  });
+}
+export function useCreateStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { warehouseId: string; note?: string }) =>
+      apiFetch<MStockCount>('/merchant/inventory/counts', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['m-counts'] }),
+  });
+}
+export function useSaveStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; items: Array<{ itemId: string; countedQty: number }> }) =>
+      apiFetch<MStockCount>(`/merchant/inventory/counts/${input.id}/save`, {
+        method: 'POST',
+        body: { items: input.items },
+      }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['m-count', v.id] }),
+  });
+}
+export function useCompleteStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<MStockCount>(`/merchant/inventory/counts/${id}/complete`, {
+        method: 'POST',
+        body: {},
+      }),
+    onSuccess: (_d, id) => {
+      void qc.invalidateQueries({ queryKey: ['m-count', id] });
+      void qc.invalidateQueries({ queryKey: ['m-counts'] });
+      void qc.invalidateQueries({ queryKey: ['inv'] });
+    },
+  });
+}

@@ -5,6 +5,7 @@ import {
   Banknote,
   BarChart3,
   ChevronRight,
+  ClipboardCheck,
   Contact,
   GalleryHorizontalEnd,
   LayoutDashboard,
@@ -82,6 +83,7 @@ const GROUPS: Group[] = [
     items: [
       { href: '/warehouses', label: 'Склады', icon: Warehouse },
       { href: '/warehouses/receive', label: 'Приёмка партии', icon: PackagePlus },
+      { href: '/inventory/count', label: 'Инвентаризация', icon: ClipboardCheck },
     ],
   },
   {

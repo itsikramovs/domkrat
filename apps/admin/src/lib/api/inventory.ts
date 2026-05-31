@@ -109,3 +109,71 @@ export function useRunScan() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-alerts'] }),
   });
 }
+
+// --- Инвентаризация ---
+export interface StockCountItem {
+  id: string;
+  cellCode: string;
+  sku: string;
+  productName: MultiLang | null;
+  expectedQty: number;
+  countedQty: number | null;
+}
+export interface StockCount {
+  id: string;
+  warehouseId: string;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  note: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  items?: StockCountItem[];
+  _count?: { items: number };
+}
+
+export function useStockCounts() {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['admin-counts', t],
+    queryFn: () => apiFetch<StockCount[]>('/admin/inventory/counts'),
+    enabled: Boolean(t),
+  });
+}
+export function useStockCount(id: string | null) {
+  const t = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ['admin-count', id, t],
+    queryFn: () => apiFetch<StockCount>(`/admin/inventory/counts/${id}`),
+    enabled: Boolean(t) && Boolean(id),
+  });
+}
+export function useCreateStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { warehouseId: string; note?: string }) =>
+      apiFetch<StockCount>('/admin/inventory/counts', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-counts'] }),
+  });
+}
+export function useSaveStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; items: Array<{ itemId: string; countedQty: number }> }) =>
+      apiFetch<StockCount>(`/admin/inventory/counts/${input.id}/save`, {
+        method: 'POST',
+        body: { items: input.items },
+      }),
+    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ['admin-count', v.id] }),
+  });
+}
+export function useCompleteStockCount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<StockCount>(`/admin/inventory/counts/${id}/complete`, { method: 'POST', body: {} }),
+    onSuccess: (_d, id) => {
+      void qc.invalidateQueries({ queryKey: ['admin-count', id] });
+      void qc.invalidateQueries({ queryKey: ['admin-counts'] });
+      void qc.invalidateQueries({ queryKey: ['admin-alerts'] });
+    },
+  });
+}

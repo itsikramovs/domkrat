@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../auth/types';
+import { CreateStockCountDto, SaveStockCountDto } from '../dto/count.dto';
 import { TransferDto } from '../dto/transfer.dto';
 import { AlertsService } from '../services/alerts.service';
 import {
@@ -34,6 +35,7 @@ import {
 } from '../dto/warehouse.dto';
 import { InventoryService } from '../services/inventory.service';
 import { ReceiptsService } from '../services/receipts.service';
+import { StockCountService } from '../services/stock-count.service';
 import { WarehousesService } from '../services/warehouses.service';
 
 @ApiTags('Merchant · Inventory')
@@ -46,6 +48,7 @@ export class MerchantInventoryController {
     private readonly receipts: ReceiptsService,
     private readonly inventory: InventoryService,
     private readonly alerts: AlertsService,
+    private readonly counts: StockCountService,
   ) {}
 
   // ---------------- Склады ----------------
@@ -224,6 +227,38 @@ export class MerchantInventoryController {
   @Post('inventory/alerts/:id/dismiss')
   dismissAlert(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.alerts.setStatus(id, this.mid(u), AlertStatus.DISMISSED, u.id);
+  }
+
+  // ---------------- Инвентаризация ----------------
+  @Get('inventory/counts')
+  @ApiOperation({ summary: 'Мои ревизии' })
+  listCounts(@CurrentUser() u: AuthenticatedUser) {
+    return this.counts.list({ userId: u.id, merchantId: this.mid(u) });
+  }
+
+  @Post('inventory/counts')
+  @ApiOperation({ summary: 'Создать ревизию по своему складу' })
+  createCount(@CurrentUser() u: AuthenticatedUser, @Body() dto: CreateStockCountDto) {
+    return this.counts.create(dto, { userId: u.id, merchantId: this.mid(u) });
+  }
+
+  @Get('inventory/counts/:id')
+  getCount(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.counts.get(id, { userId: u.id, merchantId: this.mid(u) });
+  }
+
+  @Post('inventory/counts/:id/save')
+  saveCount(
+    @CurrentUser() u: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SaveStockCountDto,
+  ) {
+    return this.counts.saveCounts(id, dto.items, { userId: u.id, merchantId: this.mid(u) });
+  }
+
+  @Post('inventory/counts/:id/complete')
+  completeCount(@CurrentUser() u: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.counts.complete(id, { userId: u.id, merchantId: this.mid(u) });
   }
 
   private mid(u: AuthenticatedUser): string {
