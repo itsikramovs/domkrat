@@ -284,6 +284,63 @@ export function useUpdateOrderStatus(id: string) {
   });
 }
 
+// --- WMS-сборка (FBO) суб-заказов из платформенных ячеек ---
+export interface AdminPickList {
+  subOrderId: string;
+  status: string;
+  fulfillmentType: 'FBO' | 'FBS';
+  items: Array<{
+    orderItemId: string;
+    name: { ru?: string; uz?: string } | null;
+    sku: string | null;
+    quantity: number;
+    status: string;
+    cells: Array<{ cellId: string | null; code: string | null; available: number }>;
+    suggested: Array<{ cellId: string; qty: number }>;
+    shortfall: number;
+  }>;
+}
+
+export function useSubOrderPickList(subOrderId: string | null, enabled = true) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  return useQuery<AdminPickList>({
+    queryKey: ['admin-pick-list', subOrderId, accessToken],
+    queryFn: () => apiFetch<AdminPickList>(`/admin/orders/suborders/${subOrderId}/pick-list`),
+    enabled: Boolean(accessToken) && Boolean(subOrderId) && enabled,
+  });
+}
+
+export function usePickSubOrder(orderId: string) {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['admin-order', orderId] });
+    void qc.invalidateQueries({ queryKey: ['admin-pick-list'] });
+  };
+  return {
+    pick: useMutation({
+      mutationFn: (input: {
+        subOrderId: string;
+        items: Array<{ orderItemId: string; picks: Array<{ cellId: string | null; qty: number }> }>;
+      }) =>
+        apiFetch(`/admin/orders/suborders/${input.subOrderId}/pick`, {
+          method: 'POST',
+          body: { items: input.items },
+        }),
+      onSuccess: invalidate,
+    }),
+    assemble: useMutation({
+      mutationFn: (subOrderId: string) =>
+        apiFetch(`/admin/orders/suborders/${subOrderId}/assemble`, { method: 'POST' }),
+      onSuccess: invalidate,
+    }),
+    ship: useMutation({
+      mutationFn: (subOrderId: string) =>
+        apiFetch(`/admin/orders/suborders/${subOrderId}/ship`, { method: 'POST' }),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
 export function useAdminWithdrawals(status?: string) {
   const t = useAuthStore((s) => s.accessToken);
   return useQuery<Paginated<AdminWithdrawal>>({

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { AdminOrderPickPanel } from '@/components/admin-order-pick-panel';
 import { AuthGate } from '@/components/auth-gate';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -159,6 +160,9 @@ function Inner() {
                           комиссия: {formatPrice(s.commissionAmount)} · выплата:{' '}
                           {formatPrice(s.merchantPayout)}
                         </div>
+                      </div>
+                      <div className="w-full">
+                        <AdminOrderPickPanel orderId={id} subOrderId={s.id} status={s.status} />
                       </div>
                     </div>
                   ))}

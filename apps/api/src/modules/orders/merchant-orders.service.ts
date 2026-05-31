@@ -5,11 +5,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderItemStatus, OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { SubOrderEvents, type SubOrderEventPayload } from '../notifications/events';
 
 const SUB_ORDER_INCLUDE = {
   order: {
@@ -35,19 +33,21 @@ const SUB_ORDER_INCLUDE = {
       unitPrice: true,
       subtotal: true,
       status: true,
+      pickedFromCellId: true,
       productSnapshot: true,
     },
   },
 } satisfies Prisma.OrderSubOrderInclude;
 
+/**
+ * Чтение заказов мерчанта + подтверждение взятия в работу. Сборка/упаковка/отгрузка из ячеек
+ * вынесены в PickingService (WMS-фаза 4): списание со склада происходит на этапе сборки.
+ */
 @Injectable()
 export class MerchantOrdersService {
   private readonly logger = new Logger(MerchantOrdersService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly events: EventEmitter2,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async list(
     merchantId: string,
@@ -92,99 +92,6 @@ export class MerchantOrdersService {
     });
   }
 
-  /** PROCESSING → ASSEMBLED — товар собран, готов к отгрузке. */
-  ready(merchantId: string, subOrderId: string, userId: string) {
-    return this.transition(merchantId, subOrderId, userId, {
-      from: [OrderStatus.PROCESSING],
-      to: OrderStatus.ASSEMBLED,
-      timestampField: 'assembledAt',
-      reason: 'Sub-order assembled',
-      itemStatus: OrderItemStatus.PICKED,
-    });
-  }
-
-  /** ASSEMBLED → SHIPPED — передан в доставку. */
-  ship(merchantId: string, subOrderId: string, userId: string) {
-    return this.transition(merchantId, subOrderId, userId, {
-      from: [OrderStatus.ASSEMBLED],
-      to: OrderStatus.SHIPPED,
-      timestampField: 'shippedAt',
-      reason: 'Sub-order shipped',
-      itemStatus: OrderItemStatus.SHIPPED,
-    });
-  }
-
-  /**
-   * FIFO-списание при отгрузке: уменьшает остаток по ячейкам, начиная с самой старой партии
-   * (oldestReceivedAt), пишет StockMovement(SHIPMENT) на каждую затронутую ячейку. Реализует
-   * ротацию «старое продаётся раньше». Если ячеечных остатков не хватает (дрейф данных или
-   * товар без размещения) — списывает что есть и логирует остаток отдельным движением.
-   */
-  private async deductFromCellsFifo(
-    tx: Prisma.TransactionClient,
-    item: {
-      offerId: string | null;
-      variantId: string | null;
-      productId: string;
-      merchantId: string;
-    },
-    quantity: number,
-    ctx: { subOrderId: string; userId: string; reason: string },
-  ): Promise<void> {
-    let remaining = quantity;
-    const { offerId, variantId, productId, merchantId } = item;
-    const cellWhere: Prisma.InventoryBalanceWhereInput = offerId
-      ? { offerId, cellId: { not: null }, quantityAvailable: { gt: 0 } }
-      : { productId, merchantId, cellId: { not: null }, quantityAvailable: { gt: 0 } };
-    const cells = await tx.inventoryBalance.findMany({
-      where: cellWhere,
-      orderBy: [{ oldestReceivedAt: 'asc' }, { lastReceivedAt: 'asc' }],
-    });
-
-    for (const c of cells) {
-      if (remaining <= 0) break;
-      const take = Math.min(remaining, c.quantityAvailable);
-      await tx.inventoryBalance.update({
-        where: { id: c.id },
-        data: { quantityAvailable: { decrement: take } },
-      });
-      await tx.stockMovement.create({
-        data: {
-          productId,
-          offerId,
-          variantId,
-          merchantId,
-          movementType: 'SHIPMENT',
-          quantity: -take,
-          fromCellId: c.cellId,
-          referenceType: 'sub_order',
-          referenceId: ctx.subOrderId,
-          performedById: ctx.userId,
-          notes: ctx.reason,
-        },
-      });
-      remaining -= take;
-    }
-
-    if (remaining > 0) {
-      // нет ячеечного остатка под весь объём — фиксируем остаток без привязки к ячейке
-      await tx.stockMovement.create({
-        data: {
-          productId,
-          offerId,
-          variantId,
-          merchantId,
-          movementType: 'SHIPMENT',
-          quantity: -remaining,
-          referenceType: 'sub_order',
-          referenceId: ctx.subOrderId,
-          performedById: ctx.userId,
-          notes: `${ctx.reason} (без привязки к ячейке)`,
-        },
-      });
-    }
-  }
-
   // -------------------------------------------------------------------------
   private async transition(
     merchantId: string,
@@ -195,7 +102,6 @@ export class MerchantOrdersService {
       to: OrderStatus;
       timestampField: 'confirmedAt' | 'assembledAt' | 'shippedAt' | 'completedAt';
       reason: string;
-      itemStatus?: OrderItemStatus;
     },
   ) {
     const sub = await this.prisma.orderSubOrder.findUnique({
@@ -210,115 +116,51 @@ export class MerchantOrdersService {
       );
     }
 
-    return this.prisma
-      .$transaction(async (tx) => {
-        const updated = await tx.orderSubOrder.update({
-          where: { id: subOrderId },
-          data: { status: cfg.to, [cfg.timestampField]: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.orderSubOrder.update({
+        where: { id: subOrderId },
+        data: { status: cfg.to, [cfg.timestampField]: new Date() },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: sub.orderId,
+          subOrderId,
+          fromStatus: sub.status,
+          toStatus: cfg.to,
+          changedById: userId,
+          changedByRole: 'MERCHANT',
+          reason: cfg.reason,
+        },
+      });
+
+      // Обновляем общий order.status, если все sub_orders в одинаковом статусе
+      const allSubs = await tx.orderSubOrder.findMany({
+        where: { orderId: sub.orderId },
+        select: { status: true },
+      });
+      if (allSubs.every((s) => s.status === cfg.to)) {
+        const orderTimestampField = cfg.to === OrderStatus.PROCESSING ? 'confirmedAt' : undefined;
+        await tx.order.update({
+          where: { id: sub.orderId },
+          data: {
+            status: cfg.to,
+            ...(orderTimestampField ? { [orderTimestampField]: new Date() } : {}),
+          },
         });
-
-        if (cfg.itemStatus) {
-          await tx.orderItem.updateMany({
-            where: { subOrderId },
-            data: {
-              status: cfg.itemStatus,
-              ...(cfg.itemStatus === OrderItemStatus.PICKED
-                ? { pickedAt: new Date(), pickedById: userId }
-                : {}),
-            },
-          });
-        }
-
-        // Если ASSEMBLED/SHIPPED — списать stock_reservation для shipping
-        if (cfg.to === OrderStatus.SHIPPED) {
-          const items = await tx.orderItem.findMany({
-            where: { subOrderId },
-            select: {
-              productId: true,
-              offerId: true,
-              variantId: true,
-              merchantId: true,
-              quantity: true,
-            },
-          });
-          for (const it of items) {
-            // снимаем резерв с агрегата предложения
-            await tx.inventoryBalance.updateMany({
-              where: it.offerId
-                ? { offerId: it.offerId, cellId: null }
-                : { productId: it.productId, merchantId: it.merchantId, cellId: null },
-              data: { quantityReserved: { decrement: it.quantity } },
-            });
-            // FIFO: физически списываем из ячеек, начиная с самой старой партии (ротация)
-            await this.deductFromCellsFifo(tx, it, it.quantity, {
-              subOrderId,
-              userId,
-              reason: cfg.reason,
-            });
-          }
-          await tx.stockReservation.updateMany({
-            where: { orderItem: { subOrderId }, releasedAt: null },
-            data: { releasedAt: new Date(), releasedReason: 'shipped' },
-          });
-        }
-
         await tx.orderStatusHistory.create({
           data: {
             orderId: sub.orderId,
-            subOrderId,
-            fromStatus: sub.status,
+            fromStatus: 'partial',
             toStatus: cfg.to,
-            changedById: userId,
-            changedByRole: 'MERCHANT',
-            reason: cfg.reason,
+            changedByRole: 'SYSTEM',
+            reason: `All sub-orders → ${cfg.to}`,
           },
         });
+        this.logger.log(`Order ${sub.orderId} bumped to ${cfg.to} (all sub-orders aligned)`);
+      }
 
-        // Обновляем общий order.status, если все sub_orders в одинаковом статусе
-        const allSubs = await tx.orderSubOrder.findMany({
-          where: { orderId: sub.orderId },
-          select: { status: true },
-        });
-        const allSame = allSubs.every((s) => s.status === cfg.to);
-        if (allSame) {
-          const orderTimestampField =
-            cfg.to === OrderStatus.PROCESSING
-              ? 'confirmedAt'
-              : cfg.to === OrderStatus.SHIPPED
-                ? 'shippedAt'
-                : undefined;
-
-          await tx.order.update({
-            where: { id: sub.orderId },
-            data: {
-              status: cfg.to,
-              ...(orderTimestampField ? { [orderTimestampField]: new Date() } : {}),
-            },
-          });
-          await tx.orderStatusHistory.create({
-            data: {
-              orderId: sub.orderId,
-              fromStatus: 'partial',
-              toStatus: cfg.to,
-              changedByRole: 'SYSTEM',
-              reason: `All sub-orders → ${cfg.to}`,
-            },
-          });
-          this.logger.log(`Order ${sub.orderId} bumped to ${cfg.to} (all sub-orders aligned)`);
-        }
-
-        return updated;
-      })
-      .then((result) => {
-        if (cfg.to === OrderStatus.SHIPPED) {
-          this.events.emit(SubOrderEvents.Shipped, {
-            subOrderId,
-            subOrderNumber: result.subOrderNumber,
-            orderId: result.orderId,
-            merchantId: result.merchantId,
-          } satisfies SubOrderEventPayload);
-        }
-        return result;
-      });
+      return updated;
+    });
   }
 }

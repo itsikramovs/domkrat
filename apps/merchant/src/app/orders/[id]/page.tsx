@@ -1,10 +1,11 @@
 'use client';
 
-import { ArrowLeft, Check, Package, Truck } from 'lucide-react';
+import { ArrowLeft, Check, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { OrderPickPanel } from '@/components/order-pick-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -42,7 +43,9 @@ export default function MerchantOrderPage() {
     <div className="container py-8 space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
         <Button asChild variant="ghost" size="icon">
-          <Link href="/orders"><ArrowLeft className="h-4 w-4" /></Link>
+          <Link href="/orders">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
         </Button>
         <h1 className="text-2xl font-bold font-mono">{o.subOrderNumber}</h1>
         <Badge variant={o.status === 'SHIPPED' ? 'success' : 'default'}>{o.status}</Badge>
@@ -50,16 +53,24 @@ export default function MerchantOrderPage() {
       </div>
 
       <Card>
-        <CardContent className="p-6 flex flex-wrap items-center gap-3">
-          <Button onClick={() => act('confirm')} disabled={!canConfirm || transition.isPending}>
-            <Check className="mr-2 h-4 w-4" /> Подтвердить (→ PROCESSING)
-          </Button>
-          <Button onClick={() => act('ready')} disabled={!canReady || transition.isPending} variant="secondary">
-            <Package className="mr-2 h-4 w-4" /> Готов к отгрузке (→ ASSEMBLED)
-          </Button>
-          <Button onClick={() => act('ship')} disabled={!canShip || transition.isPending} variant="default">
-            <Truck className="mr-2 h-4 w-4" /> Отгрузить (→ SHIPPED, списать stock)
-          </Button>
+        <CardContent className="space-y-4 p-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => act('confirm')} disabled={!canConfirm || transition.isPending}>
+              <Check className="mr-2 h-4 w-4" /> Подтвердить (→ PROCESSING)
+            </Button>
+            <Button
+              onClick={() => act('ship')}
+              disabled={!canShip || transition.isPending}
+              variant="default"
+            >
+              <Truck className="mr-2 h-4 w-4" /> Отгрузить (→ SHIPPED)
+            </Button>
+          </div>
+          {canReady ? (
+            <div className="border-t pt-4">
+              <OrderPickPanel subOrderId={o.id} />
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -74,7 +85,9 @@ export default function MerchantOrderPage() {
             <Row label="Доставка" value={o.order.deliveryMethod} />
             <Row label="Оплата" value={o.order.paymentMethod} />
             <Row label="Размещён" value={new Date(o.order.placedAt).toLocaleString('ru-RU')} />
-            {o.order.paidAt ? <Row label="Оплачен" value={new Date(o.order.paidAt).toLocaleString('ru-RU')} /> : null}
+            {o.order.paidAt ? (
+              <Row label="Оплачен" value={new Date(o.order.paidAt).toLocaleString('ru-RU')} />
+            ) : null}
           </CardContent>
         </Card>
 
@@ -88,10 +101,12 @@ export default function MerchantOrderPage() {
               <>
                 <div className="pt-2 font-semibold">Адрес</div>
                 <div className="text-muted-foreground">
-                  {o.order.deliveryAddressSnapshot.recipientName}, {o.order.deliveryAddressSnapshot.recipientPhone}
+                  {o.order.deliveryAddressSnapshot.recipientName},{' '}
+                  {o.order.deliveryAddressSnapshot.recipientPhone}
                 </div>
                 <div className="text-muted-foreground">
-                  {o.order.deliveryAddressSnapshot.city}, {o.order.deliveryAddressSnapshot.addressLine}
+                  {o.order.deliveryAddressSnapshot.city},{' '}
+                  {o.order.deliveryAddressSnapshot.addressLine}
                 </div>
               </>
             ) : null}
@@ -103,7 +118,10 @@ export default function MerchantOrderPage() {
         <CardContent className="p-6 space-y-2">
           <h2 className="font-semibold">Позиции ({o.items.length})</h2>
           {o.items.map((i) => (
-            <div key={i.id} className="flex justify-between items-start py-2 border-b last:border-0 text-sm">
+            <div
+              key={i.id}
+              className="flex justify-between items-start py-2 border-b last:border-0 text-sm"
+            >
               <div className="flex-1">
                 <div className="font-medium">{pickLocale(i.productSnapshot.name)}</div>
                 <div className="text-xs text-muted-foreground font-mono">
@@ -139,7 +157,9 @@ function Row({
   return (
     <div className={`flex justify-between ${large ? 'text-base font-bold' : ''}`}>
       <span className={muted ? 'text-muted-foreground' : ''}>{label}</span>
-      <span className={`${muted ? 'text-muted-foreground' : ''} ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className={`${muted ? 'text-muted-foreground' : ''} ${mono ? 'font-mono' : ''}`}>
+        {value}
+      </span>
     </div>
   );
 }

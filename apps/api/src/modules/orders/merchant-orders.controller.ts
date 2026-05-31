@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -16,14 +17,23 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../auth/types';
 
+import { PickDto } from './dto/pick.dto';
 import { MerchantOrdersService } from './merchant-orders.service';
+import { PickingService } from './picking.service';
 
 @ApiTags('Merchant · Orders')
 @ApiBearerAuth()
 @Roles(UserRole.MERCHANT, UserRole.MERCHANT_STAFF)
 @Controller('merchant/orders')
 export class MerchantOrdersController {
-  constructor(private readonly service: MerchantOrdersService) {}
+  constructor(
+    private readonly service: MerchantOrdersService,
+    private readonly picking: PickingService,
+  ) {}
+
+  private actor(user: AuthenticatedUser) {
+    return { userId: user.id, merchantId: user.merchantId!, role: 'MERCHANT' as const };
+  }
 
   @Get()
   @ApiOperation({ summary: 'Заказы мерчанта (sub-orders)' })
@@ -56,20 +66,39 @@ export class MerchantOrdersController {
     return this.service.confirm(user.merchantId!, id, user.id);
   }
 
+  @Get(':id/pick-list')
+  @ApiOperation({ summary: 'Лист отбора: ячейки с остатком + подсказка FIFO по позициям' })
+  pickList(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    this.requireMerchant(user);
+    return this.picking.getPickList(id, this.actor(user));
+  }
+
+  @Post(':id/pick')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Подтвердить сборку из ячеек (→ ASSEMBLED, списание из ячеек)' })
+  pick(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PickDto,
+  ) {
+    this.requireMerchant(user);
+    return this.picking.pick(id, dto, this.actor(user));
+  }
+
   @Post(':id/ready')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Готов к отгрузке (PROCESSING → ASSEMBLED)' })
+  @ApiOperation({ summary: 'Быстрая сборка авто-FIFO (PROCESSING → ASSEMBLED, списание из ячеек)' })
   ready(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     this.requireMerchant(user);
-    return this.service.ready(user.merchantId!, id, user.id);
+    return this.picking.autoAssemble(id, this.actor(user));
   }
 
   @Post(':id/ship')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Отгрузить (ASSEMBLED → SHIPPED) — списывает stock' })
+  @ApiOperation({ summary: 'Отгрузить (ASSEMBLED → SHIPPED)' })
   ship(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
     this.requireMerchant(user);
-    return this.service.ship(user.merchantId!, id, user.id);
+    return this.picking.ship(id, this.actor(user));
   }
 
   private requireMerchant(user: AuthenticatedUser): void {
