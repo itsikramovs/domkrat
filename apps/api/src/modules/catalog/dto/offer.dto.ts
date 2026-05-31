@@ -1,6 +1,16 @@
 import { ApiProperty, ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
 import { ProductOfferStatus } from '@prisma/client';
-import { IsEnum, IsNumber, IsOptional, IsString, IsUUID, Length, Min } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Min,
+} from 'class-validator';
 
 /** Предложение продавца на конкретный вариант товара: цена + продавец (мультипродавец). */
 export class CreateProductOfferDto {
@@ -60,4 +70,31 @@ export class SetOfferStatusDto {
   @ApiProperty({ enum: ProductOfferStatus })
   @IsEnum(ProductOfferStatus)
   status!: ProductOfferStatus;
+}
+
+/** Массовое изменение своих предложений (цена и/или статус). */
+export class BulkOfferDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('all', { each: true })
+  offerIds!: string[];
+
+  @ApiPropertyOptional({ description: 'Новая цена для всех выбранных' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @ApiPropertyOptional({ enum: ProductOfferStatus })
+  @IsOptional()
+  @IsEnum(ProductOfferStatus)
+  status?: ProductOfferStatus;
+}
+
+/** Импорт прайс-листа CSV (sku,name,price,vatRate,status) — фронт читает файл как текст. */
+export class ImportOffersCsvDto {
+  @ApiProperty({ description: 'Содержимое CSV' })
+  @IsString()
+  csv!: string;
 }

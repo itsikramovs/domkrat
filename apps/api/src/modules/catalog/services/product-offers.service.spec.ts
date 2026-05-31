@@ -88,3 +88,58 @@ describe('ProductOffersService.pickPrimaryOffer', () => {
     expect(picked?.id).toBe('cheap');
   });
 });
+
+describe('ProductOffersService bulk + CSV', () => {
+  let prisma: DeepMockProxy<PrismaService>;
+  let service: ProductOffersService;
+
+  beforeEach(() => {
+    prisma = mockDeep<PrismaService>();
+    service = new ProductOffersService(prisma);
+    // recomputeMinPrice внутренности
+    prisma.productOffer.aggregate.mockResolvedValue({ _min: { price: null } } as never);
+    prisma.product.update.mockResolvedValue({} as never);
+  });
+
+  it('bulkUpdate: обновляет только свои офферы и пересчитывает minPrice', async () => {
+    prisma.productOffer.findMany.mockResolvedValue([
+      { id: 'o1', productId: 'p1' },
+      { id: 'o2', productId: 'p1' },
+    ] as never);
+    prisma.productOffer.updateMany.mockResolvedValue({ count: 2 } as never);
+
+    const res = await service.bulkUpdate('m1', ['o1', 'o2'], { price: 2000 });
+
+    expect(res.updated).toBe(2);
+    expect(prisma.productOffer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ price: expect.anything() }) }),
+    );
+    expect(prisma.product.update).toHaveBeenCalledTimes(1); // одна затронутая карточка p1
+  });
+
+  it('importCsv: обновляет по SKU, неизвестные пропускает с ошибкой', async () => {
+    prisma.productOffer.findMany.mockResolvedValue([
+      { id: 'o1', sku: 'SKU-A', productId: 'p1' },
+    ] as never);
+    prisma.productOffer.update.mockResolvedValue({} as never);
+
+    const csv = 'sku,price,status\r\nSKU-A,1500,INACTIVE\r\nSKU-X,999,ACTIVE\r\n';
+    const res = await service.importCsv('m1', csv);
+
+    expect(res.updated).toBe(1);
+    expect(res.skipped).toBe(1);
+    expect(res.errors.some((e) => e.includes('SKU-X'))).toBe(true);
+    expect(prisma.productOffer.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'o1' },
+        data: expect.objectContaining({ status: 'INACTIVE' }),
+      }),
+    );
+  });
+
+  it('importCsv: без колонки sku — ошибка', async () => {
+    const res = await service.importCsv('m1', 'name,price\r\nИмя,100\r\n');
+    expect(res.updated).toBe(0);
+    expect(res.errors[0]).toContain('sku');
+  });
+});

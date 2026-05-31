@@ -8,6 +8,7 @@ import { Prisma, ProductOfferStatus } from '@prisma/client';
 
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import type { CreateProductOfferDto, UpdateProductOfferDto } from '../dto/offer.dto';
+import { parseCsv, toCsv } from '../utils/csv.util';
 
 export const OFFER_MERCHANT_SELECT = { id: true, brandName: true, slug: true } as const;
 
@@ -245,6 +246,124 @@ export class ProductOffersService {
     });
     await this.recomputeMinPrice(offer.productId);
     return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Массовые операции + импорт/экспорт прайс-листа (Ozon-уровень управления)
+  // ---------------------------------------------------------------------------
+
+  /** Массовое изменение цены/статуса своих предложений; пересчёт minPrice затронутых карточек. */
+  async bulkUpdate(
+    merchantId: string,
+    offerIds: string[],
+    patch: { price?: number; status?: ProductOfferStatus },
+  ): Promise<{ updated: number }> {
+    const offers = await this.prisma.productOffer.findMany({
+      where: { id: { in: offerIds }, merchantId, deletedAt: null },
+      select: { id: true, productId: true },
+    });
+    if (offers.length === 0) return { updated: 0 };
+
+    const data: Prisma.ProductOfferUpdateManyMutationInput = {};
+    if (patch.price != null) data.price = new Prisma.Decimal(patch.price);
+    if (patch.status != null) data.status = patch.status;
+    if (Object.keys(data).length === 0) return { updated: 0 };
+
+    await this.prisma.productOffer.updateMany({
+      where: { id: { in: offers.map((o) => o.id) } },
+      data,
+    });
+    for (const pid of new Set(offers.map((o) => o.productId))) {
+      await this.recomputeMinPrice(pid);
+    }
+    return { updated: offers.length };
+  }
+
+  /** Экспорт прайс-листа мерчанта в CSV: sku,name,price,vatRate,status. */
+  async exportCsv(merchantId: string): Promise<string> {
+    const offers = await this.prisma.productOffer.findMany({
+      where: { merchantId, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      include: { product: { select: { name: true } } },
+    });
+    const rows: Array<Array<string | number>> = [['sku', 'name', 'price', 'vatRate', 'status']];
+    for (const o of offers) {
+      const name = (o.product?.name as { ru?: string })?.ru ?? '';
+      rows.push([o.sku, name, o.price.toString(), o.vatRate.toString(), o.status]);
+    }
+    return toCsv(rows);
+  }
+
+  /** Импорт прайс-листа: обновляет price/vatRate/status своих предложений по SKU. */
+  async importCsv(
+    merchantId: string,
+    csv: string,
+  ): Promise<{ updated: number; skipped: number; errors: string[] }> {
+    const rows = parseCsv(csv);
+    if (rows.length < 2) {
+      return {
+        updated: 0,
+        skipped: 0,
+        errors: ['Пустой или некорректный CSV (нужны заголовок + строки)'],
+      };
+    }
+    const header = rows[0]!.map((h) => h.trim().toLowerCase());
+    const iSku = header.indexOf('sku');
+    const iPrice = header.indexOf('price');
+    const iVat = header.indexOf('vatrate');
+    const iStatus = header.indexOf('status');
+    if (iSku < 0) return { updated: 0, skipped: 0, errors: ['Нет обязательной колонки sku'] };
+
+    const owned = await this.prisma.productOffer.findMany({
+      where: { merchantId, deletedAt: null },
+      select: { id: true, sku: true, productId: true },
+    });
+    const bySku = new Map(owned.map((o) => [o.sku, o]));
+
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+    const productIds = new Set<string>();
+
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r]!;
+      const sku = (row[iSku] ?? '').trim();
+      if (!sku) {
+        skipped++;
+        continue;
+      }
+      const offer = bySku.get(sku);
+      if (!offer) {
+        skipped++;
+        if (errors.length < 50) errors.push(`SKU не найден среди ваших: ${sku}`);
+        continue;
+      }
+      const data: Prisma.ProductOfferUpdateInput = {};
+      if (iPrice >= 0) {
+        const p = Number((row[iPrice] ?? '').replace(/\s/g, '').replace(',', '.'));
+        if (Number.isFinite(p) && p >= 0) data.price = new Prisma.Decimal(p);
+      }
+      if (iVat >= 0 && (row[iVat] ?? '').trim() !== '') {
+        const v = Number((row[iVat] ?? '').replace(',', '.'));
+        if (Number.isFinite(v) && v >= 0) data.vatRate = new Prisma.Decimal(v);
+      }
+      if (iStatus >= 0) {
+        const s = (row[iStatus] ?? '').trim().toUpperCase();
+        if (['ACTIVE', 'INACTIVE', 'OUT_OF_STOCK'].includes(s)) {
+          data.status = s as ProductOfferStatus;
+        }
+      }
+      if (Object.keys(data).length === 0) {
+        skipped++;
+        continue;
+      }
+      await this.prisma.productOffer.update({ where: { id: offer.id }, data });
+      productIds.add(offer.productId);
+      updated++;
+    }
+
+    for (const pid of productIds) await this.recomputeMinPrice(pid);
+    return { updated, skipped, errors };
   }
 
   async remove(offerId: string): Promise<{ ok: true }> {

@@ -16,7 +16,12 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import type { AuthenticatedUser } from '../../auth/types';
 import { ReceiptsService } from '../../inventory/services/receipts.service';
 import { ReceiveProductDto } from '../dto/create-product.dto';
-import { SetOfferStatusDto, UpdateProductOfferDto } from '../dto/offer.dto';
+import {
+  BulkOfferDto,
+  ImportOffersCsvDto,
+  SetOfferStatusDto,
+  UpdateProductOfferDto,
+} from '../dto/offer.dto';
 import { ProductOffersService } from '../services/product-offers.service';
 
 /**
@@ -42,6 +47,28 @@ export class MerchantOffersController {
   @ApiOperation({ summary: 'Мои предложения (карточка, вариант, цена, статус, остаток)' })
   list(@CurrentUser() user: AuthenticatedUser) {
     return this.offers.listForMerchant(this.merchantId(user));
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Экспорт прайс-листа в CSV (sku,name,price,vatRate,status)' })
+  async export(@CurrentUser() user: AuthenticatedUser) {
+    const csv = await this.offers.exportCsv(this.merchantId(user));
+    return { csv, filename: `offers-${new Date().toISOString().slice(0, 10)}.csv` };
+  }
+
+  @Post('import')
+  @ApiOperation({ summary: 'Импорт прайс-листа CSV (обновить цену/НДС/статус по SKU)' })
+  import(@CurrentUser() user: AuthenticatedUser, @Body() dto: ImportOffersCsvDto) {
+    return this.offers.importCsv(this.merchantId(user), dto.csv);
+  }
+
+  @Patch('bulk')
+  @ApiOperation({ summary: 'Массовое изменение цены/статуса выбранных предложений' })
+  bulk(@CurrentUser() user: AuthenticatedUser, @Body() dto: BulkOfferDto) {
+    return this.offers.bulkUpdate(this.merchantId(user), dto.offerIds, {
+      price: dto.price,
+      status: dto.status,
+    });
   }
 
   @Patch(':id')

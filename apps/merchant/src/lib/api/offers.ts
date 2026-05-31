@@ -61,6 +61,33 @@ export function useSetMyOfferStatus() {
   });
 }
 
+export function useExportOffers() {
+  return useMutation({
+    mutationFn: () => apiFetch<{ csv: string; filename: string }>('/merchant/offers/export'),
+  });
+}
+
+export function useImportOffers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (csv: string) =>
+      apiFetch<{ updated: number; skipped: number; errors: string[] }>('/merchant/offers/import', {
+        method: 'POST',
+        body: { csv },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-offers'] }),
+  });
+}
+
+export function useBulkOffers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { offerIds: string[]; price?: number; status?: OfferStatus }) =>
+      apiFetch<{ updated: number }>('/merchant/offers/bulk', { method: 'PATCH', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-offers'] }),
+  });
+}
+
 export function useReceiveMyOffer() {
   const qc = useQueryClient();
   return useMutation({

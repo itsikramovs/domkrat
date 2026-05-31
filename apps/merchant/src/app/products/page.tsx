@@ -1,8 +1,8 @@
 'use client';
 
-import { Check, PackagePlus, Pencil, Search } from 'lucide-react';
+import { Check, Download, PackagePlus, Pencil, Search, Upload, X } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { MerchantOfferReceive } from '@/components/merchant-offer-receive';
@@ -12,6 +12,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ApiHttpError } from '@/lib/api-client';
 import {
+  useBulkOffers,
+  useExportOffers,
+  useImportOffers,
   useMyOffers,
   useSetMyOfferStatus,
   useUpdateMyOffer,
@@ -26,28 +29,138 @@ const STATUS: Record<OfferStatus, { label: string; variant: 'success' | 'seconda
   OUT_OF_STOCK: { label: 'Нет в наличии', variant: 'secondary' },
 };
 
+const TABS: Array<{ key: 'ALL' | OfferStatus; label: string }> = [
+  { key: 'ALL', label: 'Все' },
+  { key: 'ACTIVE', label: 'Активные' },
+  { key: 'INACTIVE', label: 'Выключенные' },
+  { key: 'OUT_OF_STOCK', label: 'Нет в наличии' },
+];
+
 export default function ProductsPage() {
   const offers = useMyOffers();
+  const exportM = useExportOffers();
+  const importM = useImportOffers();
+  const bulk = useBulkOffers();
+  const fileRef = useRef<HTMLInputElement>(null);
+
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'ALL' | OfferStatus>('ALL');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPrice, setBulkPrice] = useState('');
+
+  const all = offers.data ?? [];
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { ALL: all.length };
+    for (const o of all) c[o.status] = (c[o.status] ?? 0) + 1;
+    return c;
+  }, [all]);
 
   const list = useMemo(() => {
-    const all = offers.data ?? [];
     const q = search.trim().toLowerCase();
-    if (!q) return all;
-    return all.filter(
-      (o) =>
-        pickLocale(o.product.name).toLowerCase().includes(q) || o.sku.toLowerCase().includes(q),
-    );
-  }, [offers.data, search]);
+    return all.filter((o) => {
+      if (tab !== 'ALL' && o.status !== tab) return false;
+      if (!q) return true;
+      return (
+        pickLocale(o.product.name).toLowerCase().includes(q) || o.sku.toLowerCase().includes(q)
+      );
+    });
+  }, [all, search, tab]);
+
+  const allSelected = list.length > 0 && list.every((o) => selected.has(o.id));
+  const toggle = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const toggleAll = () =>
+    setSelected((s) => {
+      if (list.every((o) => s.has(o.id))) {
+        const n = new Set(s);
+        list.forEach((o) => n.delete(o.id));
+        return n;
+      }
+      const n = new Set(s);
+      list.forEach((o) => n.add(o.id));
+      return n;
+    });
+
+  async function doExport() {
+    try {
+      const { csv, filename } = await exportM.mutateAsync();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e instanceof ApiHttpError ? String(e.body.message) : 'Ошибка экспорта');
+    }
+  }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const res = await importM.mutateAsync(text);
+      toast.success(`Импорт: обновлено ${res.updated}, пропущено ${res.skipped}`);
+      if (res.errors.length) toast.warning(res.errors.slice(0, 3).join('; '));
+    } catch (e2) {
+      toast.error(e2 instanceof ApiHttpError ? String(e2.body.message) : 'Ошибка импорта');
+    }
+  }
+
+  async function bulkSet(patch: { status?: OfferStatus; price?: number }) {
+    try {
+      const res = await bulk.mutateAsync({ offerIds: [...selected], ...patch });
+      toast.success(`Обновлено предложений: ${res.updated}`);
+      setSelected(new Set());
+      setBulkPrice('');
+    } catch (e) {
+      toast.error(e instanceof ApiHttpError ? String(e.body.message) : 'Ошибка');
+    }
+  }
 
   return (
     <div className="container space-y-4 py-8">
-      <div>
-        <h1 className="text-3xl font-bold">Мои товары</h1>
-        <p className="text-sm text-muted-foreground">
-          Управление вашими предложениями: цена, остаток и статус. Карточки и контент ведёт
-          администратор каталога.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Мои товары</h1>
+          <p className="text-sm text-muted-foreground">
+            Управление предложениями: цена, остаток, статус. Массовые операции и прайс-лист
+            (CSV/Excel). Карточки ведёт администратор каталога.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={doExport} disabled={exportM.isPending}>
+            <Download className="mr-1 h-4 w-4" /> Экспорт CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={importM.isPending}
+          >
+            <Upload className="mr-1 h-4 w-4" /> Импорт CSV
+          </Button>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={onFile} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-full px-3 py-1 text-sm ${tab === t.key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70'}`}
+          >
+            {t.label} {counts[t.key] ? `(${counts[t.key]})` : ''}
+          </button>
+        ))}
       </div>
 
       <div className="relative max-w-md">
@@ -60,23 +173,61 @@ export default function ProductsPage() {
         />
       </div>
 
+      {selected.size > 0 ? (
+        <Card className="border-primary/40">
+          <CardContent className="flex flex-wrap items-center gap-3 p-3 text-sm">
+            <span className="font-medium">Выбрано: {selected.size}</span>
+            <span className="text-muted-foreground">Статус:</span>
+            {(['ACTIVE', 'INACTIVE', 'OUT_OF_STOCK'] as OfferStatus[]).map((s) => (
+              <Button key={s} size="sm" variant="outline" onClick={() => bulkSet({ status: s })}>
+                {STATUS[s].label}
+              </Button>
+            ))}
+            <span className="ml-2 text-muted-foreground">Цена всем:</span>
+            <Input
+              type="number"
+              value={bulkPrice}
+              onChange={(e) => setBulkPrice(e.target.value)}
+              placeholder="сумма"
+              className="h-8 w-28 tabular-nums"
+            />
+            <Button
+              size="sm"
+              onClick={() => bulkSet({ price: Number(bulkPrice) })}
+              disabled={!bulkPrice || Number(bulkPrice) <= 0 || bulk.isPending}
+            >
+              Применить
+            </Button>
+            <button
+              className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              onClick={() => setSelected(new Set())}
+            >
+              <X className="h-4 w-4" /> снять
+            </button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {offers.isLoading ? (
         <div className="py-8 text-center text-sm text-muted-foreground">Загрузка…</div>
       ) : list.length === 0 ? (
         <Card>
           <CardContent className="p-12 text-center text-muted-foreground">
-            {offers.data && offers.data.length > 0
+            {all.length > 0
               ? 'Ничего не найдено.'
-              : 'У вас пока нет предложений. Их заводит администратор каталога — обратитесь к нему, чтобы добавить ваши товары.'}
+              : 'У вас пока нет предложений. Их заводит администратор каталога — обратитесь к нему.'}
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead className="border-b bg-muted/50 text-xs">
                   <tr>
+                    <th className="px-3 py-3">
+                      <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                    </th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Товар</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="px-4 py-3 text-right font-medium text-muted-foreground">Цена</th>
@@ -90,7 +241,12 @@ export default function ProductsPage() {
                 </thead>
                 <tbody className="divide-y">
                   {list.map((o) => (
-                    <OfferRow key={o.id} offer={o} />
+                    <OfferRow
+                      key={o.id}
+                      offer={o}
+                      selected={selected.has(o.id)}
+                      onToggle={() => toggle(o.id)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -102,7 +258,15 @@ export default function ProductsPage() {
   );
 }
 
-function OfferRow({ offer }: { offer: MyOffer }) {
+function OfferRow({
+  offer,
+  selected,
+  onToggle,
+}: {
+  offer: MyOffer;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const update = useUpdateMyOffer();
   const setStatus = useSetMyOfferStatus();
   const [editing, setEditing] = useState(false);
@@ -125,6 +289,9 @@ function OfferRow({ offer }: { offer: MyOffer }) {
   return (
     <>
       <tr className="align-top hover:bg-muted/30">
+        <td className="px-3 py-3">
+          <input type="checkbox" checked={selected} onChange={onToggle} />
+        </td>
         <td className="px-4 py-3">
           <Link
             href={`/p/${offer.product.slug}`}
@@ -205,7 +372,7 @@ function OfferRow({ offer }: { offer: MyOffer }) {
       </tr>
       {receiving ? (
         <tr>
-          <td colSpan={5} className="px-4 pb-3">
+          <td colSpan={6} className="px-4 pb-3">
             <MerchantOfferReceive offerId={offer.id} onDone={() => setReceiving(false)} />
           </td>
         </tr>
